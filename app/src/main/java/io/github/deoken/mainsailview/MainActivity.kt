@@ -12,7 +12,6 @@ import android.view.WindowManager
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebView
-import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -25,8 +24,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.progressindicator.LinearProgressIndicator
+import com.google.android.material.tabs.TabLayout
 
 class MainActivity : AppCompatActivity(), WebViewHolder.Host {
 
@@ -35,15 +34,15 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
     private lateinit var progress: LinearProgressIndicator
     private lateinit var container: FrameLayout
     private lateinit var emptyView: TextView
-    private lateinit var printerGroup: MaterialButtonToggleGroup
-    private lateinit var printerButtons: List<Button>
+    private lateinit var printerTabs: TabLayout
     private lateinit var btnBack: ImageButton
     private lateinit var btnForward: ImageButton
 
     private var webView: WebView? = null
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var pendingDownload: PendingDownload? = null
-    private var updatingToggle = false
+    private var updatingTabs = false
+    private var shownPrinters: List<Printer> = emptyList()
 
     private val pickFiles = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val data = result.data
@@ -76,8 +75,7 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         progress = findViewById(R.id.progress)
         container = findViewById(R.id.webContainer)
         emptyView = findViewById(R.id.emptyView)
-        printerGroup = findViewById(R.id.printerGroup)
-        printerButtons = listOf<Button>(findViewById(R.id.btnPrinter1), findViewById(R.id.btnPrinter2))
+        printerTabs = findViewById(R.id.printerTabs)
         btnBack = findViewById(R.id.btnBack)
         btnForward = findViewById(R.id.btnForward)
 
@@ -93,15 +91,17 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         findViewById<ImageButton>(R.id.btnReload).setOnClickListener { webView?.reload() }
         findViewById<ImageButton>(R.id.btnSettings).setOnClickListener { openSettings() }
 
-        printerGroup.addOnButtonCheckedListener { _, id, isChecked ->
-            if (!isChecked || updatingToggle) return@addOnButtonCheckedListener
-            val index = printerButtons.indexOfFirst { it.id == id }
-            if (index >= 0 && index != Prefs.selectedPrinter(this)) {
-                Prefs.setSelectedPrinter(this, index)
+        printerTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) {
+                if (updatingTabs) return
+                val printer = tab.tag as? Printer ?: return
+                Prefs.setSelectedPrinter(this@MainActivity, printer.id)
                 loadSelectedPrinter()
             }
-        }
-        printerButtons.forEach { it.setOnLongClickListener { openSettings(); true } }
+
+            override fun onTabUnselected(tab: TabLayout.Tab) {}
+            override fun onTabReselected(tab: TabLayout.Tab) {}
+        })
 
         // Back walks page history; at the start of history it backgrounds the app
         // instead of closing it, so the connection stays up.
@@ -115,9 +115,7 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         webView = WebViewHolder.attach(this, this, container)
         requestNotificationPermissionOnce()
 
-        if (savedInstanceState == null && (0 until Prefs.PRINTER_COUNT).none { Prefs.printerUrl(this, it) != null }) {
-            openSettings()
-        }
+        if (savedInstanceState == null && Prefs.printers(this).isEmpty()) openSettings()
     }
 
     override fun onResume() {
@@ -129,8 +127,9 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         } else {
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
-        updatePrinterButtons()
+        updatePrinterTabs()
         loadSelectedPrinter()
+        WebViewHolder.applyUiScale()
     }
 
     override fun onDestroy() {
@@ -142,18 +141,29 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
     }
 
     private fun loadSelectedPrinter() {
-        val url = Prefs.printerUrl(this, Prefs.selectedPrinter(this))
+        val url = Prefs.normalizeUrl(Prefs.selectedPrinter(this)?.url)
         emptyView.visibility = if (url == null) View.VISIBLE else View.GONE
         webView?.visibility = if (url == null) View.INVISIBLE else View.VISIBLE
         WebViewHolder.ensureLoaded(url)
         onNavigationChanged()
     }
 
-    private fun updatePrinterButtons() {
-        updatingToggle = true
-        printerButtons.forEachIndexed { i, button -> button.text = Prefs.printerName(this, i) }
-        printerGroup.check(printerButtons[Prefs.selectedPrinter(this)].id)
-        updatingToggle = false
+    private fun updatePrinterTabs() {
+        val printers = Prefs.printers(this)
+        val selectedId = Prefs.selectedPrinter(this)?.id
+        updatingTabs = true
+        if (printers != shownPrinters) {
+            shownPrinters = printers
+            printerTabs.removeAllTabs()
+            printers.forEach { printer ->
+                val tab = printerTabs.newTab().setText(printer.name).setTag(printer)
+                printerTabs.addTab(tab, false)
+                tab.view.setOnLongClickListener { openSettings(); true }
+            }
+        }
+        val index = printers.indexOfFirst { it.id == selectedId }
+        if (index >= 0) printerTabs.selectTab(printerTabs.getTabAt(index))
+        updatingTabs = false
     }
 
     private fun applyBarPosition() {

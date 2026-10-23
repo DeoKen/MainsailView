@@ -50,6 +50,10 @@ object WebViewHolder {
     private var hasDocumentStartScript = false
     private var injectJs = ""
 
+    /** The WebView's width in CSS px (dp), read by the page to size its viewport. */
+    @Volatile
+    private var viewWidthDp = 0f
+
     val current: WebView? get() = webView
 
     fun attach(context: Context, host: Host, container: ViewGroup): WebView {
@@ -83,6 +87,11 @@ object WebViewHolder {
         webView?.reload()
     }
 
+    /** Re-applies the UI scale setting, e.g. after it changed or the screen size changed. */
+    fun applyUiScale() {
+        webView?.evaluateJavascript("window.__mainsailView && window.__mainsailView.applyScale()", null)
+    }
+
     fun suspendCams() {
         webView?.evaluateJavascript("window.__mainsailView && window.__mainsailView.suspendCams()", null)
     }
@@ -112,6 +121,15 @@ object WebViewHolder {
             javaScriptCanOpenWindowsAutomatically = true
             mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             allowFileAccess = false
+            // Honour the page's viewport meta tag, which inject.js rewrites for UI scale.
+            useWideViewPort = true
+        }
+        wv.addOnLayoutChangeListener { v, left, _, right, _, _, _, _, _ ->
+            val widthDp = (right - left) / v.resources.displayMetrics.density
+            if (widthDp > 0 && widthDp != viewWidthDp) {
+                viewWidthDp = widthDp
+                applyUiScale()
+            }
         }
         // Keep the renderer at foreground priority even while hidden so Android doesn't
         // kill it (and with it the websocket) when memory gets tight.
@@ -167,6 +185,12 @@ object WebViewHolder {
     }
 
     private object Bridge {
+        @JavascriptInterface
+        fun uiScale(): Float = Prefs.uiScale(App.instance)
+
+        @JavascriptInterface
+        fun viewWidthDp(): Float = viewWidthDp
+
         @JavascriptInterface
         fun saveBase64(data: String, mimeType: String?, fileName: String?) {
             val bytes = try {

@@ -62,6 +62,43 @@
         });
     };
 
+    // UI scale: Mainsail picks its layout (mobile/tablet/desktop/widescreen) from the page
+    // width, so give it a page of (screen width / scale) and shrink that to fit the screen.
+    mv.applyScale = function () {
+        var bridge = window.MainsailViewBridge;
+        if (!bridge) return;
+        var scale = Math.round(bridge.uiScale() * 100) / 100;
+        var width = bridge.viewWidthDp();
+        var content = 'width=device-width,initial-scale=1.0';
+        if (scale > 0 && width > 0 && scale !== 1) {
+            content = 'width=' + Math.round(width / scale) + ',initial-scale=' + scale +
+                ',minimum-scale=' + scale + ',maximum-scale=' + scale;
+        }
+        var metas = document.querySelectorAll('meta[name="viewport"]');
+        var meta = metas[0];
+        if (!meta) {
+            if (!document.head) return;
+            meta = document.createElement('meta');
+            meta.name = 'viewport';
+            document.head.appendChild(meta);
+        }
+        for (var i = 1; i < metas.length; i++) metas[i].remove();
+        if (meta.content !== content) meta.content = content;
+    };
+
+    // Apply as soon as the page's own viewport tag is parsed, before Mainsail lays out.
+    var viewportWatcher = new MutationObserver(function () {
+        if (document.querySelector('meta[name="viewport"]')) {
+            viewportWatcher.disconnect();
+            mv.applyScale();
+        }
+    });
+    viewportWatcher.observe(document, { childList: true, subtree: true });
+    document.addEventListener('DOMContentLoaded', function () {
+        viewportWatcher.disconnect();
+        mv.applyScale();
+    });
+
     mv.saveUrl = function (href, fileName) {
         fetch(href)
             .then(function (r) { return r.blob(); })

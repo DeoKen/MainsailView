@@ -3,8 +3,11 @@
 A minimal Android app that wraps [Mainsail](https://docs.mainsail.xyz/) for two printers
 in a WebView that stays connected while you're in other apps.
 
-- Two printers, each with a user-set name and address (Settings ⚙, or long-press a printer tab).
-  One printer is loaded at a time; switching loads the other.
+- Any number of printers, each with a name and address. Add, edit, reorder and delete them in
+  Settings ⚙ (long-press a printer tab to get there). They show as tabs; one is loaded at a time.
+- **UI scale** changes the page width Mainsail sees, so you can choose its mobile, tablet, desktop
+  or widescreen layout (and the dashboard you set up for it). It is a percentage of whichever screen
+  is in use, so a foldable's cover and main screens each adapt; Settings shows the resulting layout.
 - Back / forward / reload buttons. The toolbar can sit at the top or bottom.
 - A foreground service (with its notification) keeps the websocket alive in the background.
 - Webcams pause in the background: Mainsail stops MJPEG itself, and the app closes WebRTC

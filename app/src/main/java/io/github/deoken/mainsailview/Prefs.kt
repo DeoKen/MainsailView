@@ -4,21 +4,66 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import androidx.preference.PreferenceManager
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.UUID
+
+data class Printer(val id: String, val name: String, val url: String)
 
 object Prefs {
-    const val PRINTER_COUNT = 2
+    private const val KEY_PRINTERS = "printers"
+    private const val KEY_SELECTED = "selected_printer_id"
 
     private fun sp(context: Context): SharedPreferences =
         PreferenceManager.getDefaultSharedPreferences(context)
 
-    fun printerName(context: Context, index: Int): String {
-        val fallback = context.getString(if (index == 0) R.string.printer_1 else R.string.printer_2)
-        return sp(context).getString("printer${index + 1}_name", null)?.trim()?.ifEmpty { null } ?: fallback
+    fun printers(context: Context): List<Printer> {
+        migrateLegacyPrinters(context)
+        val json = sp(context).getString(KEY_PRINTERS, null) ?: return emptyList()
+        return try {
+            val array = JSONArray(json)
+            List(array.length()) { i ->
+                val o = array.getJSONObject(i)
+                Printer(o.getString("id"), o.optString("name"), o.optString("url"))
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
-    /** The printer's address with a scheme added if the user left it off, or null if unset. */
-    fun printerUrl(context: Context, index: Int): String? =
-        normalizeUrl(sp(context).getString("printer${index + 1}_url", null))
+    fun savePrinters(context: Context, printers: List<Printer>) {
+        val array = JSONArray()
+        printers.forEach { array.put(JSONObject().put("id", it.id).put("name", it.name).put("url", it.url)) }
+        sp(context).edit { putString(KEY_PRINTERS, array.toString()) }
+    }
+
+    fun newPrinter(name: String, url: String) = Printer(UUID.randomUUID().toString(), name, url)
+
+    /** The selected printer, falling back to the first one; null when none are set up. */
+    fun selectedPrinter(context: Context): Printer? {
+        val printers = printers(context)
+        val id = sp(context).getString(KEY_SELECTED, null)
+        return printers.firstOrNull { it.id == id } ?: printers.firstOrNull()
+    }
+
+    fun setSelectedPrinter(context: Context, id: String) =
+        sp(context).edit { putString(KEY_SELECTED, id) }
+
+    /** Version 0.1 stored exactly two printers under fixed keys; fold them into the list. */
+    private fun migrateLegacyPrinters(context: Context) {
+        val sp = sp(context)
+        if (sp.contains(KEY_PRINTERS)) return
+        val legacy = (1..2).mapNotNull { n ->
+            val url = sp.getString("printer${n}_url", null)?.trim().orEmpty()
+            if (url.isEmpty()) null
+            else newPrinter(sp.getString("printer${n}_name", null)?.trim()?.ifEmpty { null } ?: "Printer $n", url)
+        }
+        savePrinters(context, legacy)
+        sp.edit {
+            (1..2).forEach { remove("printer${it}_name"); remove("printer${it}_url") }
+            remove("selected_printer")
+        }
+    }
 
     fun normalizeUrl(raw: String?): String? {
         val url = raw?.trim().orEmpty()
@@ -26,14 +71,12 @@ object Prefs {
         return if (url.contains("://")) url else "http://$url"
     }
 
-    fun selectedPrinter(context: Context): Int =
-        sp(context).getInt("selected_printer", 0).coerceIn(0, PRINTER_COUNT - 1)
-
-    fun setSelectedPrinter(context: Context, index: Int) =
-        sp(context).edit { putInt("selected_printer", index) }
-
     fun barAtBottom(context: Context): Boolean =
         sp(context).getString("bar_position", "top") == "bottom"
+
+    /** Page scale as a fraction; below 1 gives Mainsail a wider page than the screen. */
+    fun uiScale(context: Context): Float =
+        (sp(context).getString("ui_scale", null)?.toIntOrNull() ?: 100).coerceIn(10, 400) / 100f
 
     /** Minutes in the background before the app closes itself; 0 means never. */
     fun killMinutes(context: Context): Int =

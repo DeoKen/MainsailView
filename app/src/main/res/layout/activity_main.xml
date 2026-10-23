@@ -13,41 +13,19 @@
         android:layout_height="52dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="8dp"
+        android:paddingStart="0dp"
         android:paddingEnd="4dp">
 
-        <com.google.android.material.button.MaterialButtonToggleGroup
-            android:id="@+id/printerGroup"
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/printerTabs"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:layout_weight="1"
-            app:selectionRequired="true"
-            app:singleSelection="true">
-
-            <Button
-                android:id="@+id/btnPrinter1"
-                style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:minWidth="0dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp" />
-
-            <Button
-                android:id="@+id/btnPrinter2"
-                style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:minWidth="0dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
+            android:background="@android:color/transparent"
+            app:tabGravity="start"
+            app:tabMode="scrollable"
+            app:tabPaddingEnd="12dp"
+            app:tabPaddingStart="12dp" />
 
         <ImageButton
             android:id="@+id/btnBack"
@@ -103,7 +81,7 @@
             android:layout_gravity="center"
             android:gravity="center"
             android:padding="24dp"
-            android:text="@string/no_address"
+            android:text="@string/no_printers"
             android:textAppearance="?attr/textAppearanceBodyLarge"
             android:visibility="gone" />
     </FrameLayout>
