@@ -68,6 +68,12 @@ class App : Application(), DefaultLifecycleObserver {
         super<Application>.onCreate()
         instance = this
         Diag.init(this)
+        // Record any crash in the connection log before the app closes, so it can be fixed.
+        val crashHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            Diag.log("CRASH: " + error.stackTraceToString().lines().take(12).joinToString(" | "))
+            crashHandler?.uncaughtException(thread, error)
+        }
         Diag.log("App started (a fresh process: if it was open before, it had been closed or killed)")
         PreferenceManager.setDefaultValues(this, R.xml.preferences, false)
         registerActivityLifecycleCallbacks(ActivityTracker())

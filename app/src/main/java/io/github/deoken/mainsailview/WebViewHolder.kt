@@ -161,8 +161,15 @@ object WebViewHolder {
         if (!force && key == appliedScale) return
         appliedScale = key
         wv.evaluateJavascript("window.__mainsailView && window.__mainsailView.applyScale($width)") {
-            // zoomBy is clamped to the smallest zoom, which is "page fits the screen width".
-            main.postDelayed({ webView?.zoomBy(0.01f) }, 150)
+            // Zoom far out; it's clamped to the smallest zoom, which is "page fits the screen
+            // width". (zoomBy rejects factors below 0.01, and 0.01f as a float is just under.)
+            main.postDelayed({
+                try {
+                    webView?.zoomBy(0.02f)
+                } catch (e: IllegalArgumentException) {
+                    Diag.log("Couldn't fit the page to the screen: ${e.message}")
+                }
+            }, 150)
         }
     }
 
@@ -219,8 +226,15 @@ object WebViewHolder {
         wv.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
         CookieManager.getInstance().setAcceptCookie(true)
         wv.addJavascriptInterface(Bridge, "MainsailViewBridge")
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) RelaySockets.install(wv)
-        else Diag.log("This WebView can't relay the printer connection; using the page's own")
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            try {
+                RelaySockets.install(wv)
+            } catch (e: RuntimeException) {
+                Diag.log("Couldn't set up the connection relay (${e.message}); using the page's own")
+            }
+        } else {
+            Diag.log("This WebView can't relay the printer connection; using the page's own")
+        }
         hasDocumentStartScript = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
         if (hasDocumentStartScript) WebViewCompat.addDocumentStartJavaScript(wv, injectJs, setOf("*"))
         wv.webViewClient = client
