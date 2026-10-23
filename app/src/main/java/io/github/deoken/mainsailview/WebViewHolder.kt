@@ -96,7 +96,7 @@ object WebViewHolder {
      * screen's UI scale. Called on resume, configuration and display changes, and resizes.
      */
     fun updateScreen(context: Context, force: Boolean = true) {
-        val role = Screens.current(context)
+        val role = Screens.current(context).role
         if (role == screenRole && !force) return
         screenRole = role
         applyUiScale()
@@ -144,8 +144,9 @@ object WebViewHolder {
             val widthDp = (right - left) / v.resources.displayMetrics.density
             if (widthDp <= 0) return@addOnLayoutChangeListener
             viewWidthDp = widthDp
-            v.display?.let { screenRole = Screens.current(v.context, it) }
-            applyUiScale()
+            // Measure through the attached activity: its window follows the screen it's on.
+            val activity = wrapper?.baseContext as? android.app.Activity
+            if (activity != null) updateScreen(activity) else applyUiScale()
         }
         // Keep the renderer at foreground priority even while hidden so Android doesn't
         // kill it (and with it the websocket) when memory gets tight.

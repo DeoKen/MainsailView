@@ -68,6 +68,11 @@ class SettingsActivity : AppCompatActivity() {
                     getString(R.string.pref_kill_minutes_summary, value.toString())
                 }
             }
+            findPreference<Preference>("screens")?.setOnPreferenceClickListener {
+                Screens.forget(requireContext())
+                setupUiScale()
+                true
+            }
             findPreference<Preference>("battery")?.setOnPreferenceClickListener {
                 Battery.requestUnrestricted(requireContext())
                 true
@@ -88,8 +93,14 @@ class SettingsActivity : AppCompatActivity() {
 
         private fun setupUiScale() {
             val activity = activity ?: return
-            val current = Screens.current(activity)
+            val info = Screens.current(activity)
+            val current = info.role
             Prefs.uiScale(activity, current) // runs the one-time migration of the old single setting
+            findPreference<Preference>("screens")?.summary = getString(
+                R.string.pref_screens_summary,
+                Screens.describe(info),
+                Screens.describeKnown(activity).joinToString("\n")
+            )
             for (role in ScreenRole.values()) {
                 val pref = findPreference<ListPreference>(Prefs.uiScaleKey(role)) ?: continue
                 val baseTitle = getString(if (role == ScreenRole.COVER) R.string.pref_ui_scale_cover else R.string.pref_ui_scale_main)

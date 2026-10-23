@@ -19,6 +19,10 @@
             app:entryValues="@array/ui_scale_values"
             app:key="ui_scale_cover"
             app:title="@string/pref_ui_scale_cover" />
+        <Preference
+            app:key="screens"
+            app:persistent="false"
+            app:title="@string/pref_screens" />
         <ListPreference
             app:defaultValue="top"
             app:entries="@array/bar_position_entries"
