@@ -60,13 +60,15 @@ class App : Application(), DefaultLifecycleObserver {
     // elapsedRealtime() does, so a late check still closes on time once the CPU wakes.
     private val backgroundCheck = object : Runnable {
         override fun run() {
-            if (backgroundExpired()) shutdown() else handler.postDelayed(this, CHECK_INTERVAL_MS)
+            if (backgroundExpired()) shutdown("close timer") else handler.postDelayed(this, CHECK_INTERVAL_MS)
         }
     }
 
     override fun onCreate() {
         super<Application>.onCreate()
         instance = this
+        Diag.init(this)
+        Diag.log("App started (a fresh process: if it was open before, it had been closed or killed)")
         PreferenceManager.setDefaultValues(this, R.xml.preferences, false)
         registerActivityLifecycleCallbacks(ActivityTracker())
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
@@ -77,11 +79,15 @@ class App : Application(), DefaultLifecycleObserver {
         handler.removeCallbacks(backgroundCheck)
         releaseWakeLock()
         val expired = backgroundExpired()
+        Diag.log(
+            if (backgroundSince == 0L) "Opened"
+            else "Back in the app after ${(SystemClock.elapsedRealtime() - backgroundSince) / 1000} s"
+        )
         backgroundSince = 0L
         KeepAliveService.start(this)
         if (expired) {
             // The timer couldn't fire while the phone slept; treat this as a fresh start.
-            WebViewHolder.reload()
+            WebViewHolder.reload("close timer had passed while the phone slept")
         } else {
             WebViewHolder.resumeCams()
             // Back from the background (e.g. the phone was folded and locked): if Mainsail
@@ -94,6 +100,7 @@ class App : Application(), DefaultLifecycleObserver {
 
     override fun onStop(owner: LifecycleOwner) {
         backgroundSince = SystemClock.elapsedRealtime()
+        Diag.log("Went to the background")
         WebViewHolder.suspendCams()
         val minutes = Prefs.killMinutes(this)
         if (minutes > 0) {
@@ -126,8 +133,15 @@ class App : Application(), DefaultLifecycleObserver {
     /** True in PiP or just after it, when a removed task means the PiP window was closed. */
     fun pipJustDismissed() = inPip || SystemClock.elapsedRealtime() - pipEndedAt < 5_000
 
+    // Android asking apps to free memory: a sign the page could be killed next.
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW && level != android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) Diag.log("Android reports low memory (level $level)")
+    }
+
     /** Closes the page, the notification, every screen, and finally the process. */
-    fun shutdown() {
+    fun shutdown(reason: String) {
+        Diag.log("Closed: $reason")
         handler.removeCallbacksAndMessages(null)
         releaseWakeLock()
         WebViewHolder.destroy()

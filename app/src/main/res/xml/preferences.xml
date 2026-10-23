@@ -47,5 +47,10 @@
             app:defaultValue="10"
             app:key="kill_minutes"
             app:title="@string/pref_kill_minutes" />
+        <Preference
+            app:key="connection_log"
+            app:persistent="false"
+            app:summary="@string/pref_connection_log_summary"
+            app:title="@string/pref_connection_log" />
     </PreferenceCategory>
 </PreferenceScreen>

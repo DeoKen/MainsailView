@@ -107,7 +107,7 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
 
         btnBack.setOnClickListener { webView?.takeIf { it.canGoBack() }?.goBack() }
         btnForward.setOnClickListener { webView?.takeIf { it.canGoForward() }?.goForward() }
-        findViewById<ImageButton>(R.id.btnReload).setOnClickListener { webView?.reload() }
+        findViewById<ImageButton>(R.id.btnReload).setOnClickListener { WebViewHolder.reload("reload button") }
         findViewById<ImageButton>(R.id.btnSettings).setOnClickListener { openSettings() }
 
         printerTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {

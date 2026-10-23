@@ -72,6 +72,10 @@ class SettingsActivity : AppCompatActivity() {
                     getString(R.string.pref_kill_minutes_summary, value.toString())
                 }
             }
+            findPreference<Preference>("connection_log")?.setOnPreferenceClickListener {
+                showConnectionLog()
+                true
+            }
             findPreference<Preference>("battery")?.setOnPreferenceClickListener {
                 Battery.requestUnrestricted(requireContext())
                 true
@@ -86,6 +90,34 @@ class SettingsActivity : AppCompatActivity() {
             findPreference<Preference>("battery")?.summary = getString(
                 if (Battery.isUnrestricted(requireContext())) R.string.battery_unrestricted else R.string.battery_optimised
             )
+        }
+
+        private fun showConnectionLog() {
+            val ctx = requireContext()
+            val text = Diag.read().ifBlank { getString(R.string.log_empty) }
+            val padding = (16 * resources.displayMetrics.density).toInt()
+            val textView = android.widget.TextView(ctx).apply {
+                this.text = text
+                typeface = android.graphics.Typeface.MONOSPACE
+                textSize = 11f
+                setTextIsSelectable(true)
+                setPadding(padding, padding, padding, padding)
+            }
+            val scroll = android.widget.ScrollView(ctx).apply {
+                addView(textView)
+                post { fullScroll(View.FOCUS_DOWN) } // newest entries are at the bottom
+            }
+            MaterialAlertDialogBuilder(ctx)
+                .setTitle(R.string.pref_connection_log)
+                .setView(scroll)
+                .setPositiveButton(R.string.copy) { _, _ ->
+                    val clipboard = ctx.getSystemService(android.content.ClipboardManager::class.java)
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText(getString(R.string.pref_connection_log), text))
+                    android.widget.Toast.makeText(ctx, R.string.copied, android.widget.Toast.LENGTH_SHORT).show()
+                }
+                .setNeutralButton(R.string.clear) { _, _ -> Diag.clear() }
+                .setNegativeButton(R.string.close, null)
+                .show()
         }
 
         // --- UI scale ---

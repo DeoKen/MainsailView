@@ -58,4 +58,10 @@
     <string name="screen_cover">Cover screen</string>
     <string name="yes">yes</string>
     <string name="no">no</string>
+    <string name="pref_connection_log">Connection log</string>
+    <string name="pref_connection_log_summary">What happened to the page and the printer connection, with times. Tap to view, copy or clear.</string>
+    <string name="log_empty">Nothing logged yet.</string>
+    <string name="copy">Copy</string>
+    <string name="clear">Clear</string>
+    <string name="copied">Log copied</string>
 </resources>

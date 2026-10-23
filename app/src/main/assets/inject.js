@@ -40,12 +40,51 @@
     var NativeWS = window.WebSocket;
     var mainSocketUrl = null;
     var mainSocket = null;
+    var lastMessageAt = 0;
+
+    function log(message) {
+        try {
+            if (window.MainsailViewBridge) window.MainsailViewBridge.log(message);
+        } catch (e) {}
+    }
+    function ago(t) {
+        return t ? Math.round((Date.now() - t) / 1000) + ' s ago' : 'never';
+    }
+
+    // Listens to (never alters) Mainsail's printer connection, for the log and recovery.
+    function watchMainSocket(ws) {
+        var openedAt = 0;
+        ws.addEventListener('open', function () {
+            openedAt = lastMessageAt = Date.now();
+            log('Connected to the printer');
+        });
+        ws.addEventListener('message', function () {
+            lastMessageAt = Date.now();
+        });
+        ws.addEventListener('close', function (e) {
+            log('Printer connection closed (code ' + e.code + (e.reason ? ', ' + e.reason : '') +
+                (e.wasClean ? ', clean' : '') + '), open for ' +
+                (openedAt ? Math.round((Date.now() - openedAt) / 1000) + ' s' : '0 s') +
+                ', last message ' + ago(lastMessageAt));
+            if (ws === mainSocket) scheduleRecovery();
+        });
+        var nativeClose = ws.close;
+        ws.close = function () {
+            if (ws.readyState === NativeWS.OPEN) log('Mainsail closed its connection itself; last message ' + ago(lastMessageAt));
+            return nativeClose.apply(ws, arguments);
+        };
+        patchHeartbeat();
+    }
+
     if (NativeWS) {
         var WrappedWS = function (url, protocols) {
             var ws = protocols === undefined ? new NativeWS(url) : new NativeWS(url, protocols);
             if (/\/websocket(\?|$)/.test(ws.url)) {
                 if (mainSocketUrl === null) mainSocketUrl = ws.url;
-                if (ws.url === mainSocketUrl) mainSocket = ws;
+                if (ws.url === mainSocketUrl) {
+                    mainSocket = ws;
+                    watchMainSocket(ws);
+                }
             }
             return ws;
         };
@@ -60,13 +99,18 @@
         return mainSocket.readyState === NativeWS.CLOSING || mainSocket.readyState === NativeWS.CLOSED;
     };
 
+    function mainsailVm() {
+        var root = document.querySelector('[data-app]') || document.getElementById('app');
+        var vm = root && root.__vue__;
+        return vm && vm.$socket ? vm : null;
+    }
+
     // Does what Mainsail's own "Try again" button does (TheConnectingDialog.reconnect):
     // reconnects and reloads the printer data without reloading the page. Returns false
     // if this Mainsail doesn't look as expected, so the app can reload the page instead.
     mv.reconnect = function () {
-        var root = document.querySelector('[data-app]') || document.getElementById('app');
-        var vm = root && root.__vue__;
-        if (!vm || !vm.$socket || typeof vm.$socket.connect !== 'function') return false;
+        var vm = mainsailVm();
+        if (!vm || typeof vm.$socket.connect !== 'function') return false;
         try {
             if (vm.$store) vm.$store.dispatch('socket/setData', { connectingFailed: false });
             vm.$socket.connect();
@@ -75,6 +119,67 @@
             return false;
         }
     };
+
+    // After the connection closes, give Mainsail's own quick retries (about 5 s) a chance,
+    // then press its Try again if it's still down. Keeps going while the page is alive.
+    var recoveryTimer = null;
+    function scheduleRecovery() {
+        if (recoveryTimer) return;
+        recoveryTimer = setTimeout(function () {
+            recoveryTimer = null;
+            if (!mv.connectionLost()) return;
+            log('Still disconnected: pressing Try again');
+            if (!mv.reconnect()) log('Try again is not available in this Mainsail');
+        }, 6000);
+    }
+
+    // Mainsail drops the connection when no message arrives for 10 s (its heartbeat). If the
+    // page was paused in the background, that timer can fire on resume before the messages
+    // that arrived meanwhile are handled, wrongly killing a healthy connection. Same check,
+    // but it looks again 3 s later before giving up. Only patched if Mainsail looks as expected.
+    var heartbeatPatched = false;
+    var heartbeatTries = 0;
+    function patchHeartbeat() {
+        if (heartbeatPatched) return;
+        var vm = mainsailVm();
+        if (!vm) {
+            if (heartbeatTries++ < 60) setTimeout(patchHeartbeat, 1000);
+            return;
+        }
+        var client = vm.$socket;
+        if (typeof client.heartbeat !== 'function' || !('heartbeatTimer' in client)) {
+            log('Mainsail heartbeat not found; left as is');
+            return;
+        }
+        heartbeatPatched = true;
+        var confirming = false;
+        client.heartbeat = function () {
+            var self = this;
+            if (confirming) log('Kept the connection: messages were still arriving after a pause');
+            confirming = false;
+            if (self.heartbeatTimer) clearTimeout(self.heartbeatTimer);
+            self.heartbeatTimer = window.setTimeout(function () {
+                confirming = true;
+                self.heartbeatTimer = window.setTimeout(function () {
+                    confirming = false;
+                    if (!self.instance || self.instance.readyState !== NativeWS.OPEN || !self.store) return;
+                    log('No message from the printer for 13 s: disconnecting (Mainsail heartbeat)');
+                    self.close();
+                    self.store.dispatch('socket/onClose');
+                }, 3000);
+            }, 10000);
+        };
+    }
+
+    // Notes when the page itself was paused (frozen or heavily throttled by the phone).
+    var lastTick = Date.now();
+    setInterval(function () {
+        var now = Date.now();
+        if (now - lastTick > 15000) {
+            log('Page was paused for ' + Math.round((now - lastTick) / 1000) + ' s' + (forcedHidden ? ' (app in background)' : ''));
+        }
+        lastTick = now;
+    }, 2000);
 
     function suspend(pc) {
         if (pc.signalingState === 'closed') return;

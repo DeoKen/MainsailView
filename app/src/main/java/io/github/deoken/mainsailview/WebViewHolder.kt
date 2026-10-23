@@ -95,7 +95,8 @@ object WebViewHolder {
         wv.loadUrl(url ?: "about:blank")
     }
 
-    fun reload() {
+    fun reload(reason: String) {
+        Diag.log("Reloading the page: $reason")
         lostAtLastCheck = false
         webView?.reload()
     }
@@ -110,7 +111,7 @@ object WebViewHolder {
         val wv = webView ?: return
         if (loadedUrl == null) return
         if (pageFailed) {
-            reload()
+            reload("the page had failed to load")
             return
         }
         wv.evaluateJavascript("window.__mainsailView ? window.__mainsailView.connectionLost() : false") { result ->
@@ -122,8 +123,9 @@ object WebViewHolder {
     /** Mainsail's own "Try again" (no page reload); a full reload only if that's unavailable. */
     private fun reconnect() {
         lostAtLastCheck = false
+        Diag.log("Mainsail is disconnected: pressing its Try again")
         webView?.evaluateJavascript("window.__mainsailView ? window.__mainsailView.reconnect() : false") { result ->
-            if (result != "true") reload()
+            if (result != "true") reload("Mainsail's Try again isn't available")
         }
     }
 
@@ -220,6 +222,9 @@ object WebViewHolder {
 
     private object Bridge {
         @JavascriptInterface
+        fun log(message: String) = Diag.log("Page: $message")
+
+        @JavascriptInterface
         fun fullscreenState(on: Boolean, width: Int, height: Int) {
             if (!on) return
             main.post {
@@ -249,6 +254,7 @@ object WebViewHolder {
         }
 
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+            if (url != "about:blank") Diag.log("Loading $url")
             pageFailed = false
             if (!hasDocumentStartScript) view.evaluateJavascript(injectJs, null)
             host?.onNavigationChanged()
@@ -268,10 +274,11 @@ object WebViewHolder {
         // locked): keep retrying while the app is open instead of leaving an error page.
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
             if (!request.isForMainFrame || view !== webView) return
+            Diag.log("Page failed to load: ${error.description}")
             pageFailed = true
             if (App.instance.isInForeground && loadRetries < MAX_LOAD_RETRIES) {
                 loadRetries++
-                main.postDelayed({ if (pageFailed && App.instance.isInForeground) webView?.reload() }, 3_000)
+                main.postDelayed({ if (pageFailed && App.instance.isInForeground) reload("retrying the failed load") }, 3_000)
             }
         }
 
@@ -283,6 +290,10 @@ object WebViewHolder {
             // The page's renderer crashed or was killed: throw this WebView away and
             // let the activity build and load a fresh one.
             if (view === webView) {
+                Diag.log(
+                    if (detail.didCrash()) "The page's process crashed"
+                    else "Android killed the page's process (its priority was ${detail.rendererPriorityAtExit()}; 2 = important)"
+                )
                 destroy()
                 host?.onWebViewReset()
             } else {
