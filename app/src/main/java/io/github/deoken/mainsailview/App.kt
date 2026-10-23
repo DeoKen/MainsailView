@@ -56,6 +56,7 @@ class App : Application(), DefaultLifecycleObserver {
         PreferenceManager.setDefaultValues(this, R.xml.preferences, false)
         registerActivityLifecycleCallbacks(ActivityTracker())
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
+        Shortcuts.update(this)
     }
 
     override fun onStart(owner: LifecycleOwner) {

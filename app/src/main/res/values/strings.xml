@@ -54,4 +54,6 @@
     <string name="not_now">Not now</string>
     <string name="pref_screens">Detected screens · tap to forget</string>
     <string name="pref_screens_summary">This screen → %1$s\nRemembered:\n%2$s</string>
+    <string name="fullscreen">Fullscreen</string>
+    <string name="fullscreen_hint">Swipe down from the top edge to show the toolbar</string>
 </resources>

@@ -28,6 +28,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.android.material.tabs.TabLayout
@@ -42,12 +43,22 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
     private lateinit var printerTabs: TabLayout
     private lateinit var btnBack: ImageButton
     private lateinit var btnForward: ImageButton
+    private lateinit var btnFullscreen: ImageButton
 
     private var webView: WebView? = null
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var pendingDownload: PendingDownload? = null
     private var updatingTabs = false
     private var shownPrinters: List<Printer> = emptyList()
+
+    // Fullscreen hides the toolbar and system bars; swiping in a system bar "peeks" the
+    // toolbar for a few seconds so it can be turned off again.
+    private var peeking = false
+    private var barsHiddenAt = 0L
+    private val endPeek = Runnable {
+        peeking = false
+        applyFullscreen()
+    }
 
     // Folding/unfolding can move the window to the other screen without any other callback.
     // Debounced: Samsung also reports every refresh-rate change as a display change.
@@ -96,9 +107,24 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         printerTabs = findViewById(R.id.printerTabs)
         btnBack = findViewById(R.id.btnBack)
         btnForward = findViewById(R.id.btnForward)
+        btnFullscreen = findViewById(R.id.btnFullscreen)
 
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val fullscreen = Prefs.fullscreen(this) && !isInPictureInPictureMode
+            val settling = android.os.SystemClock.uptimeMillis() - barsHiddenAt < 1000 // bars still animating away
+            if (fullscreen && !peeking && !settling && insets.isVisible(WindowInsetsCompat.Type.statusBars())) {
+                // The user swiped the system bars in: show the toolbar for a moment too.
+                peeking = true
+                bar.visibility = View.VISIBLE
+                root.removeCallbacks(endPeek)
+                root.postDelayed(endPeek, 4000)
+            }
+            val types = if (fullscreen && !peeking) {
+                WindowInsetsCompat.Type.displayCutout()
+            } else {
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            }
+            val bars = if (fullscreen) insets.getInsetsIgnoringVisibility(types) else insets.getInsets(types)
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
             v.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
             WindowInsetsCompat.CONSUMED
@@ -108,6 +134,14 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         btnForward.setOnClickListener { webView?.takeIf { it.canGoForward() }?.goForward() }
         findViewById<ImageButton>(R.id.btnReload).setOnClickListener { webView?.reload() }
         findViewById<ImageButton>(R.id.btnSettings).setOnClickListener { openSettings() }
+        btnFullscreen.setOnClickListener {
+            val on = !Prefs.fullscreen(this)
+            Prefs.setFullscreen(this, on)
+            peeking = false
+            root.removeCallbacks(endPeek)
+            applyFullscreen()
+            if (on) Toast.makeText(this, R.string.fullscreen_hint, Toast.LENGTH_SHORT).show()
+        }
 
         printerTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab) {
@@ -131,6 +165,7 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         })
 
         webView = WebViewHolder.attach(this, this, container)
+        selectPrinterFromIntent(intent)
         requestNotificationPermissionOnce()
         offerBatteryExemptionOnce()
 
@@ -146,9 +181,41 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         } else {
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
+        applyFullscreen()
         updatePrinterTabs()
         loadSelectedPrinter()
         WebViewHolder.updateScreen(this)
+    }
+
+    // singleTask: a launcher shortcut tapped while the app is open arrives here.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        selectPrinterFromIntent(intent)
+    }
+
+    private fun selectPrinterFromIntent(intent: Intent?) {
+        val id = intent?.getStringExtra(Shortcuts.EXTRA_PRINTER_ID) ?: return
+        intent.removeExtra(Shortcuts.EXTRA_PRINTER_ID)
+        if (Prefs.printers(this).any { it.id == id }) Prefs.setSelectedPrinter(this, id)
+    }
+
+    private fun applyFullscreen() {
+        if (isInPictureInPictureMode) return
+        val fullscreen = Prefs.fullscreen(this)
+        btnFullscreen.setImageResource(if (fullscreen) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen)
+        bar.visibility = if (fullscreen && !peeking) View.GONE else View.VISIBLE
+        val controller = WindowInsetsControllerCompat(window, root)
+        if (fullscreen) {
+            // Default behaviour: a swipe brings the bars back for real (reported in insets),
+            // which is what lets the toolbar peek; endPeek hides them again.
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            barsHiddenAt = android.os.SystemClock.uptimeMillis()
+        } else {
+            controller.show(WindowInsetsCompat.Type.systemBars())
+        }
+        ViewCompat.requestApplyInsets(root)
     }
 
     override fun onStart() {
@@ -190,9 +257,12 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        val normal = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
-        bar.visibility = normal
-        if (isInPictureInPictureMode) progress.visibility = View.GONE
+        if (isInPictureInPictureMode) {
+            bar.visibility = View.GONE
+            progress.visibility = View.GONE
+        } else {
+            applyFullscreen()
+        }
         WebViewHolder.setPip(isInPictureInPictureMode)
         App.instance.notePip(isInPictureInPictureMode)
     }

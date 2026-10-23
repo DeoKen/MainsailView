@@ -35,6 +35,7 @@ object Prefs {
         val array = JSONArray()
         printers.forEach { array.put(JSONObject().put("id", it.id).put("name", it.name).put("url", it.url)) }
         sp(context).edit { putString(KEY_PRINTERS, array.toString()) }
+        Shortcuts.update(context)
     }
 
     fun newPrinter(name: String, url: String) = Printer(UUID.randomUUID().toString(), name, url)
@@ -87,6 +88,12 @@ object Prefs {
     /** Minutes in the background before the app closes itself; 0 means never. */
     fun killMinutes(context: Context): Int =
         sp(context).getString("kill_minutes", null)?.trim()?.toIntOrNull()?.coerceAtLeast(0) ?: 10
+
+    fun fullscreen(context: Context): Boolean =
+        sp(context).getBoolean("fullscreen", false)
+
+    fun setFullscreen(context: Context, on: Boolean) =
+        sp(context).edit { putBoolean("fullscreen", on) }
 
     fun keepScreenOn(context: Context): Boolean =
         sp(context).getBoolean("keep_screen_on", true)
