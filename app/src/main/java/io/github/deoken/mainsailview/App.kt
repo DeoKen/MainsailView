@@ -42,7 +42,7 @@ class App : Application(), DefaultLifecycleObserver {
     }
 
     override fun onCreate() {
-        super.onCreate()
+        super<Application>.onCreate()
         instance = this
         PreferenceManager.setDefaultValues(this, R.xml.preferences, false)
         registerActivityLifecycleCallbacks(ActivityTracker())
