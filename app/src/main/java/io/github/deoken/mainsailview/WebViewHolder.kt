@@ -39,7 +39,9 @@ object WebViewHolder {
         fun onNavigationChanged()
         fun onProgress(progress: Int)
         fun onWebViewReset()
-        fun onCamStateChanged()
+        fun showFullscreen(view: android.view.View, callback: WebChromeClient.CustomViewCallback)
+        fun hideFullscreen()
+        fun onFullscreenAspectChanged()
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -55,22 +57,11 @@ object WebViewHolder {
     @Volatile
     private var viewWidthDp = 0f
 
-    /** True while Mainsail's Webcam page is open, i.e. when picture-in-picture makes sense. */
-    var onCamPage = false
+    /** Shape of the element shown fullscreen (e.g. a webcam), for the PiP window. */
+    var fullscreenWidth = 16
         private set
-
-    /** Shape of the first webcam on that page, for the PiP window. */
-    var camWidth = 16
+    var fullscreenHeight = 9
         private set
-    var camHeight = 9
-        private set
-
-    @Volatile
-    private var inPip = false
-
-    /** Which physical screen (cover or main) the WebView is currently on. */
-    @Volatile
-    private var screenRole = ScreenRole.MAIN
 
     val current: WebView? get() = webView
 
@@ -103,24 +94,6 @@ object WebViewHolder {
 
     fun reload() {
         webView?.reload()
-    }
-
-    /**
-     * Works out which screen (cover or main) [context]'s window is on and applies that
-     * screen's UI scale. Called on resume, configuration and display changes, and resizes.
-     */
-    fun updateScreen(context: Context, force: Boolean = true) {
-        val role = Screens.current(context).role
-        if (role == screenRole && !force) return
-        screenRole = role
-        applyUiScale()
-    }
-
-    /** Switches the page between showing only the first webcam (PiP) and normal. */
-    fun setPip(on: Boolean) {
-        inPip = on
-        webView?.evaluateJavascript("window.__mainsailView && window.__mainsailView.setPip($on)", null)
-        applyUiScale()
     }
 
     /** Re-applies the UI scale setting, e.g. after it changed or the screen size changed. */
@@ -165,9 +138,7 @@ object WebViewHolder {
             val widthDp = (right - left) / v.resources.displayMetrics.density
             if (widthDp <= 0) return@addOnLayoutChangeListener
             viewWidthDp = widthDp
-            // Measure through the attached activity: its window follows the screen it's on.
-            val activity = wrapper?.baseContext as? android.app.Activity
-            if (activity != null) updateScreen(activity) else applyUiScale()
+            applyUiScale()
         }
         // Keep the renderer at foreground priority even while hidden so Android doesn't
         // kill it (and with it the websocket) when memory gets tight.
@@ -224,15 +195,15 @@ object WebViewHolder {
 
     private object Bridge {
         @JavascriptInterface
-        fun uiScale(): Float = if (inPip) 1f else Prefs.uiScale(App.instance, screenRole)
+        fun uiScale(): Float = Prefs.uiScale(App.instance, Screens.role)
 
         @JavascriptInterface
-        fun camState(onCamPage: Boolean, width: Int, height: Int) {
+        fun fullscreenState(on: Boolean, width: Int, height: Int) {
+            if (!on) return
             main.post {
-                WebViewHolder.onCamPage = onCamPage
-                camWidth = width.coerceAtLeast(1)
-                camHeight = height.coerceAtLeast(1)
-                host?.onCamStateChanged()
+                fullscreenWidth = width.coerceAtLeast(1)
+                fullscreenHeight = height.coerceAtLeast(1)
+                host?.onFullscreenAspectChanged()
             }
         }
 
@@ -299,6 +270,16 @@ object WebViewHolder {
 
         override fun onProgressChanged(view: WebView, newProgress: Int) {
             host?.onProgress(newProgress)
+        }
+
+        // Fullscreen API (a video's fullscreen button, or double-tapping a webcam).
+        override fun onShowCustomView(view: android.view.View, callback: CustomViewCallback) {
+            val h = host
+            if (h == null) callback.onCustomViewHidden() else h.showFullscreen(view, callback)
+        }
+
+        override fun onHideCustomView() {
+            host?.hideFullscreen()
         }
 
         // window.open(): Mainsail uses it for file downloads and the odd external link.

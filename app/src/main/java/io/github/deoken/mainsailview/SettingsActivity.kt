@@ -49,6 +49,10 @@ class SettingsActivity : AppCompatActivity() {
                 .replace(R.id.settingsContainer, SettingsFragment())
                 .commit()
         }
+        // Relabel the UI scale options whenever the fold says we moved screens.
+        Screens.watch(this) {
+            (supportFragmentManager.findFragmentById(R.id.settingsContainer) as? SettingsFragment)?.setupUiScale()
+        }
     }
 
     override fun onSupportNavigateUp(): Boolean {
@@ -68,11 +72,6 @@ class SettingsActivity : AppCompatActivity() {
                     getString(R.string.pref_kill_minutes_summary, value.toString())
                 }
             }
-            findPreference<Preference>("screens")?.setOnPreferenceClickListener {
-                Screens.forget(requireContext())
-                setupUiScale()
-                true
-            }
             findPreference<Preference>("battery")?.setOnPreferenceClickListener {
                 Battery.requestUnrestricted(requireContext())
                 true
@@ -91,15 +90,15 @@ class SettingsActivity : AppCompatActivity() {
 
         // --- UI scale ---
 
-        private fun setupUiScale() {
+        fun setupUiScale() {
             val activity = activity ?: return
-            val info = Screens.current(activity)
-            val current = info.role
+            val current = Screens.role
             Prefs.uiScale(activity, current) // runs the one-time migration of the old single setting
             findPreference<Preference>("screens")?.summary = getString(
                 R.string.pref_screens_summary,
-                Screens.describe(info),
-                Screens.describeKnown(activity).joinToString("\n")
+                getString(if (current == ScreenRole.COVER) R.string.screen_cover else R.string.screen_main),
+                getString(if (Screens.foldVisible) R.string.yes else R.string.no),
+                getString(if (Screens.isFoldable(activity)) R.string.yes else R.string.no)
             )
             for (role in ScreenRole.values()) {
                 val pref = findPreference<ListPreference>(Prefs.uiScaleKey(role)) ?: continue

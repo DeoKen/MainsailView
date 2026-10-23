@@ -52,8 +52,12 @@
     <string name="battery_message">With battery optimisation on, Android can freeze or kill the hidden page, which forces Mainsail to reload. Allow the app to run unrestricted so the connection stays up.</string>
     <string name="battery_allow">Allow</string>
     <string name="not_now">Not now</string>
-    <string name="pref_screens">Detected screens · tap to forget</string>
-    <string name="pref_screens_summary">This screen → %1$s\nRemembered:\n%2$s</string>
+    <string name="pref_screens">Detected screen</string>
+    <string name="pref_screens_summary">%1$s · window spans the fold: %2$s · foldable: %3$s</string>
+    <string name="screen_main">Main screen</string>
+    <string name="screen_cover">Cover screen</string>
+    <string name="yes">yes</string>
+    <string name="no">no</string>
     <string name="fullscreen">Fullscreen</string>
     <string name="fullscreen_hint">Swipe down from the top edge to show the toolbar</string>
 </resources>

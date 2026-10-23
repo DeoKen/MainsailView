@@ -49,5 +49,7 @@ dependencies {
     implementation("androidx.webkit:webkit:1.12.1")
     implementation("androidx.preference:preference-ktx:1.2.1")
     implementation("androidx.lifecycle:lifecycle-process:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.window:window:1.3.0")
     implementation("com.google.android.material:material:1.12.0")
 }

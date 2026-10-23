@@ -22,6 +22,7 @@
         <Preference
             app:key="screens"
             app:persistent="false"
+            app:selectable="false"
             app:title="@string/pref_screens" />
         <ListPreference
             app:defaultValue="top"

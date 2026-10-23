@@ -6,12 +6,13 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
-import android.hardware.display.DisplayManager
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Rational
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -29,6 +30,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.android.material.tabs.TabLayout
@@ -60,18 +62,9 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         applyFullscreen()
     }
 
-    // Folding/unfolding can move the window to the other screen without any other callback.
-    // Debounced: Samsung also reports every refresh-rate change as a display change.
-    private val checkScreen = Runnable { WebViewHolder.updateScreen(this, force = false) }
-    private val displayListener = object : DisplayManager.DisplayListener {
-        override fun onDisplayChanged(displayId: Int) {
-            root.removeCallbacks(checkScreen)
-            root.postDelayed(checkScreen, 300)
-        }
-
-        override fun onDisplayAdded(displayId: Int) {}
-        override fun onDisplayRemoved(displayId: Int) {}
-    }
+    // An element the page put in fullscreen (e.g. the webcam video), shown over everything.
+    private var fullscreenView: View? = null
+    private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
 
     private val pickFiles = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val data = result.data
@@ -160,11 +153,17 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 val wv = webView
-                if (wv != null && wv.canGoBack()) wv.goBack() else moveTaskToBack(true)
+                when {
+                    fullscreenView != null -> exitPageFullscreen()
+                    wv != null && wv.canGoBack() -> wv.goBack()
+                    else -> moveTaskToBack(true)
+                }
             }
         })
 
         webView = WebViewHolder.attach(this, this, container)
+        // Cover vs main screen, from whether the window spans the fold (see Screens).
+        Screens.watch(this) { WebViewHolder.applyUiScale() }
         selectPrinterFromIntent(intent)
         requestNotificationPermissionOnce()
         offerBatteryExemptionOnce()
@@ -184,7 +183,7 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         applyFullscreen()
         updatePrinterTabs()
         loadSelectedPrinter()
-        WebViewHolder.updateScreen(this)
+        WebViewHolder.applyUiScale()
     }
 
     // singleTask: a launcher shortcut tapped while the app is open arrives here.
@@ -201,7 +200,7 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
     }
 
     private fun applyFullscreen() {
-        if (isInPictureInPictureMode) return
+        if (isInPictureInPictureMode || fullscreenView != null) return
         val fullscreen = Prefs.fullscreen(this)
         btnFullscreen.setImageResource(if (fullscreen) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen)
         bar.visibility = if (fullscreen && !peeking) View.GONE else View.VISIBLE
@@ -218,35 +217,65 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         ViewCompat.requestApplyInsets(root)
     }
 
-    override fun onStart() {
-        super.onStart()
-        getSystemService(DisplayManager::class.java).registerDisplayListener(displayListener, null)
+    // --- Page fullscreen (WebChromeClient custom view) and picture-in-picture ---
+
+    override fun showFullscreen(view: View, callback: WebChromeClient.CustomViewCallback) {
+        if (fullscreenView != null) {
+            callback.onCustomViewHidden()
+            return
+        }
+        fullscreenView = view
+        fullscreenCallback = callback
+        view.setBackgroundColor(Color.BLACK)
+        (window.decorView as ViewGroup).addView(
+            view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        )
+        val controller = WindowInsetsControllerCompat(window, root)
+        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.hide(WindowInsetsCompat.Type.systemBars())
+        updatePipParams()
     }
 
-    override fun onStop() {
-        getSystemService(DisplayManager::class.java).unregisterDisplayListener(displayListener)
-        root.removeCallbacks(checkScreen)
-        super.onStop()
+    override fun hideFullscreen() {
+        val view = fullscreenView ?: return
+        fullscreenView = null
+        fullscreenCallback = null
+        (view.parent as? ViewGroup)?.removeView(view)
+        applyFullscreen()
+        if (!Prefs.fullscreen(this)) WindowInsetsControllerCompat(window, root).show(WindowInsetsCompat.Type.systemBars())
+        updatePipParams()
     }
 
-    // --- Picture-in-picture (only while Mainsail's Webcam page is open) ---
+    /** Leaves page fullscreen from our side (Back, or the PiP window being closed). */
+    private fun exitPageFullscreen() {
+        val callback = fullscreenCallback
+        hideFullscreen()
+        callback?.onCustomViewHidden()
+    }
+
+    override fun onFullscreenAspectChanged() = updatePipParams()
 
     private fun pipParams(): PictureInPictureParams {
         // Android only accepts aspect ratios between about 1:2.39 and 2.39:1.
-        val ratio = (WebViewHolder.camWidth.toFloat() / WebViewHolder.camHeight).coerceIn(0.42f, 2.39f)
+        val ratio = (WebViewHolder.fullscreenWidth.toFloat() / WebViewHolder.fullscreenHeight).coerceIn(0.42f, 2.39f)
         val builder = PictureInPictureParams.Builder().setAspectRatio(Rational((ratio * 1000).toInt(), 1000))
-        if (Build.VERSION.SDK_INT >= 31) builder.setAutoEnterEnabled(WebViewHolder.onCamPage)
+        if (Build.VERSION.SDK_INT >= 31) builder.setAutoEnterEnabled(fullscreenView != null)
         return builder.build()
     }
 
-    override fun onCamStateChanged() {
-        setPictureInPictureParams(pipParams())
+    private fun updatePipParams() {
+        try {
+            setPictureInPictureParams(pipParams())
+        } catch (e: IllegalStateException) {
+            // PiP turned off for this app in system settings.
+        }
     }
 
+    // Like Chrome: leaving the app while something is fullscreen shrinks it into PiP.
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         // Android 12+ enters PiP by itself through setAutoEnterEnabled.
-        if (Build.VERSION.SDK_INT < 31 && WebViewHolder.onCamPage) {
+        if (Build.VERSION.SDK_INT < 31 && fullscreenView != null) {
             try {
                 enterPictureInPictureMode(pipParams())
             } catch (e: IllegalStateException) {
@@ -257,22 +286,20 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        if (isInPictureInPictureMode) {
-            bar.visibility = View.GONE
-            progress.visibility = View.GONE
-        } else {
-            applyFullscreen()
-        }
-        WebViewHolder.setPip(isInPictureInPictureMode)
         App.instance.notePip(isInPictureInPictureMode)
+        if (isInPictureInPictureMode) return
+        // Closed with X (not expanded back): drop fullscreen so the app returns to normal.
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) exitPageFullscreen()
+        applyFullscreen()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        WebViewHolder.updateScreen(this)
+        WebViewHolder.applyUiScale()
     }
 
     override fun onDestroy() {
+        exitPageFullscreen()
         WebViewHolder.detach(this)
         fileCallback?.onReceiveValue(null)
         fileCallback = null
