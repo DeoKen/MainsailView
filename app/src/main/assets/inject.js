@@ -31,6 +31,30 @@
         window.RTCPeerConnection = Wrapped;
     }
 
+    // Track the page's websockets (without changing them) so the app can tell, when it comes
+    // back to the foreground, whether Mainsail's connection to Moonraker was lost.
+    var NativeWS = window.WebSocket;
+    var sockets = [];
+    if (NativeWS) {
+        var WrappedWS = function (url, protocols) {
+            var ws = protocols === undefined ? new NativeWS(url) : new NativeWS(url, protocols);
+            sockets.push(ws);
+            if (sockets.length > 20) sockets.shift();
+            return ws;
+        };
+        WrappedWS.prototype = NativeWS.prototype;
+        Object.setPrototypeOf(WrappedWS, NativeWS); // keeps WebSocket.OPEN etc.
+        window.WebSocket = WrappedWS;
+    }
+
+    // True when the newest Moonraker connection is closed and nothing is reconnecting.
+    mv.connectionLost = function () {
+        var moonraker = sockets.filter(function (ws) { return /\/websocket(\?|$)/.test(ws.url); });
+        if (!moonraker.length) return false;
+        var state = moonraker[moonraker.length - 1].readyState;
+        return state === NativeWS.CLOSING || state === NativeWS.CLOSED;
+    };
+
     function suspend(pc) {
         if (pc.signalingState === 'closed') return;
         try {

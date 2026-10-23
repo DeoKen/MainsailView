@@ -53,6 +53,13 @@ object WebViewHolder {
     private var hasDocumentStartScript = false
     private var injectJs = ""
 
+    // Connection recovery: a failed main page load, retries of it, and whether the last
+    // check found Mainsail's websocket closed.
+    private var pageFailed = false
+    private var loadRetries = 0
+    private var lostAtLastCheck = false
+    private const val MAX_LOAD_RETRIES = 40 // every 3 s, so about 2 minutes
+
     /** The WebView's width in CSS px (dp), read by the page to size its viewport. */
     @Volatile
     private var viewWidthDp = 0f
@@ -93,7 +100,27 @@ object WebViewHolder {
     }
 
     fun reload() {
+        lostAtLastCheck = false
         webView?.reload()
+    }
+
+    /**
+     * Reloads the page if Mainsail lost its connection to Moonraker (or the page itself
+     * failed to load). [immediate] reloads on the first sign of it, e.g. on returning to
+     * the app; otherwise it must be seen on two checks in a row, so Mainsail's own quick
+     * reconnect attempts get a chance first.
+     */
+    fun checkConnection(immediate: Boolean) {
+        val wv = webView ?: return
+        if (loadedUrl == null) return
+        if (pageFailed) {
+            reload()
+            return
+        }
+        wv.evaluateJavascript("window.__mainsailView ? window.__mainsailView.connectionLost() : false") { result ->
+            val lost = result == "true"
+            if (lost && (immediate || lostAtLastCheck)) reload() else lostAtLastCheck = lost
+        }
     }
 
     /** Re-applies the UI scale setting, e.g. after it changed or the screen size changed. */
@@ -230,17 +257,30 @@ object WebViewHolder {
         }
 
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+            pageFailed = false
             if (!hasDocumentStartScript) view.evaluateJavascript(injectJs, null)
             host?.onNavigationChanged()
         }
 
         override fun onPageFinished(view: WebView, url: String?) {
+            if (!pageFailed) loadRetries = 0
             if (!hasDocumentStartScript) view.evaluateJavascript(injectJs, null)
             if (clearHistoryOnLoad && url != "about:blank") {
                 clearHistoryOnLoad = false
                 view.clearHistory()
             }
             host?.onNavigationChanged()
+        }
+
+        // The printer couldn't be reached (e.g. Wi-Fi still waking up after the phone was
+        // locked): keep retrying while the app is open instead of leaving an error page.
+        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
+            if (!request.isForMainFrame || view !== webView) return
+            pageFailed = true
+            if (App.instance.isInForeground && loadRetries < MAX_LOAD_RETRIES) {
+                loadRetries++
+                main.postDelayed({ if (pageFailed && App.instance.isInForeground) webView?.reload() }, 3_000)
+            }
         }
 
         override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {

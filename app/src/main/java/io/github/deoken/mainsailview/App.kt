@@ -26,6 +26,7 @@ class App : Application(), DefaultLifecycleObserver {
             private set
 
         private const val CHECK_INTERVAL_MS = 15_000L
+        private const val WATCHDOG_INTERVAL_MS = 10_000L
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -44,6 +45,17 @@ class App : Application(), DefaultLifecycleObserver {
 
     // Polls rather than posting one long delay: Handler delays don't count deep sleep,
     // elapsedRealtime() does, so a late check still closes on time once the CPU wakes.
+    // While the app is open, watch for Mainsail losing its connection and recover it.
+    private val connectionWatchdog = object : Runnable {
+        override fun run() {
+            WebViewHolder.checkConnection(immediate = false)
+            handler.postDelayed(this, WATCHDOG_INTERVAL_MS)
+        }
+    }
+
+    val isInForeground: Boolean
+        get() = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
+
     private val backgroundCheck = object : Runnable {
         override fun run() {
             if (backgroundExpired()) shutdown() else handler.postDelayed(this, CHECK_INTERVAL_MS)
@@ -70,11 +82,17 @@ class App : Application(), DefaultLifecycleObserver {
             WebViewHolder.reload()
         } else {
             WebViewHolder.resumeCams()
+            // Back from the background (e.g. the phone was folded and locked): if Mainsail
+            // gave up on the connection meanwhile, reconnect now rather than show its error.
+            WebViewHolder.checkConnection(immediate = true)
         }
+        handler.removeCallbacks(connectionWatchdog)
+        handler.postDelayed(connectionWatchdog, WATCHDOG_INTERVAL_MS)
     }
 
     override fun onStop(owner: LifecycleOwner) {
         backgroundSince = SystemClock.elapsedRealtime()
+        handler.removeCallbacks(connectionWatchdog)
         WebViewHolder.suspendCams()
         val minutes = Prefs.killMinutes(this)
         if (minutes > 0) {
