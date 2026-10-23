@@ -74,9 +74,15 @@ object Prefs {
     fun barAtBottom(context: Context): Boolean =
         sp(context).getString("bar_position", "top") == "bottom"
 
-    /** Page scale as a fraction; below 1 gives Mainsail a wider page than the screen. */
-    fun uiScale(context: Context): Float =
-        (sp(context).getString("ui_scale", null)?.toIntOrNull() ?: 100).coerceIn(10, 400) / 100f
+    fun uiScaleKey(role: ScreenRole) = if (role == ScreenRole.COVER) "ui_scale_cover" else "ui_scale_main"
+
+    /** Page scale for [role]'s screen as a fraction; below 1 gives Mainsail a wider page than the screen. */
+    fun uiScale(context: Context, role: ScreenRole): Float {
+        val sp = sp(context)
+        // 0.2 had a single "ui_scale"; it becomes the main screen's.
+        sp.getString("ui_scale", null)?.let { old -> sp.edit { putString("ui_scale_main", old); remove("ui_scale") } }
+        return (sp.getString(uiScaleKey(role), null)?.toIntOrNull() ?: 100).coerceIn(10, 400) / 100f
+    }
 
     /** Minutes in the background before the app closes itself; 0 means never. */
     fun killMinutes(context: Context): Int =

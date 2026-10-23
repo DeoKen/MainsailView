@@ -54,6 +54,10 @@ object WebViewHolder {
     @Volatile
     private var viewWidthDp = 0f
 
+    /** Which physical screen (cover or main) the WebView is currently on. */
+    @Volatile
+    private var screenRole = ScreenRole.MAIN
+
     val current: WebView? get() = webView
 
     fun attach(context: Context, host: Host, container: ViewGroup): WebView {
@@ -128,6 +132,7 @@ object WebViewHolder {
             val widthDp = (right - left) / v.resources.displayMetrics.density
             if (widthDp > 0 && widthDp != viewWidthDp) {
                 viewWidthDp = widthDp
+                v.display?.let { screenRole = Screens.current(v.context, it) }
                 applyUiScale()
             }
         }
@@ -186,7 +191,7 @@ object WebViewHolder {
 
     private object Bridge {
         @JavascriptInterface
-        fun uiScale(): Float = Prefs.uiScale(App.instance)
+        fun uiScale(): Float = Prefs.uiScale(App.instance, screenRole)
 
         @JavascriptInterface
         fun viewWidthDp(): Float = viewWidthDp

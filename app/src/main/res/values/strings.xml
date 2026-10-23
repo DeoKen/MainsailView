@@ -35,9 +35,12 @@
     <string name="delete">Delete</string>
     <string name="move_up">Move up</string>
     <string name="address_required">Enter an address</string>
-    <string name="pref_ui_scale">UI scale</string>
+    <string name="pref_ui_scale_main">UI scale · main screen</string>
+    <string name="pref_ui_scale_cover">UI scale · cover screen</string>
+    <string name="this_screen">%1$s (this screen)</string>
+    <string name="cover_not_seen">Open the app on the cover screen once to set this.</string>
     <string name="ui_scale_entry">%1$d%% · %2$d px wide · %3$s</string>
-    <string name="ui_scale_summary">%1$d%% · on this screen Mainsail is %2$d px wide (%3$s layout). Applied relative to whichever screen is in use.</string>
+    <string name="ui_scale_summary">%1$d%% · Mainsail is %2$d px wide here (%3$s layout)</string>
     <string name="layout_mobile">Mobile</string>
     <string name="layout_tablet">Tablet</string>
     <string name="layout_desktop">Desktop</string>

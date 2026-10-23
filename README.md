@@ -5,7 +5,7 @@ in a WebView that stays connected while you're in other apps.
 
 - Any number of printers, each with a name and address. Add, edit, reorder and delete them in
   Settings ⚙ (long-press a printer tab to get there). They show as tabs; one is loaded at a time.
-- **UI scale** changes the page width Mainsail sees, so you can choose its mobile, tablet, desktop
+- **UI scale** (separate for a foldable's main and cover screens) changes the page width Mainsail sees, so you can choose its mobile, tablet, desktop
   or widescreen layout (and the dashboard you set up for it). It is a percentage of whichever screen
   is in use, so a foldable's cover and main screens each adapt; Settings shows the resulting layout.
 - Back / forward / reload buttons. The toolbar can sit at the top or bottom.

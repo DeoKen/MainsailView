@@ -80,17 +80,36 @@ class SettingsActivity : AppCompatActivity() {
         // --- UI scale ---
 
         private fun setupUiScale() {
-            val pref = findPreference<ListPreference>("ui_scale") ?: return
-            val screenWidthDp = resources.configuration.screenWidthDp
-            pref.entries = pref.entryValues.map { value ->
-                val percent = value.toString().toInt()
-                val width = pageWidth(screenWidthDp, percent)
-                getString(R.string.ui_scale_entry, percent, width, layoutName(width))
-            }.toTypedArray()
-            pref.setSummaryProvider { p ->
-                val percent = (p as ListPreference).value?.toIntOrNull() ?: 100
-                val width = pageWidth(screenWidthDp, percent)
-                getString(R.string.ui_scale_summary, percent, width, layoutName(width))
+            val activity = activity ?: return
+            val current = Screens.current(activity)
+            Prefs.uiScale(activity, current) // runs the one-time migration of the old single setting
+            for (role in ScreenRole.values()) {
+                val pref = findPreference<ListPreference>(Prefs.uiScaleKey(role)) ?: continue
+                val baseTitle = getString(if (role == ScreenRole.COVER) R.string.pref_ui_scale_cover else R.string.pref_ui_scale_main)
+                pref.title = if (role == current) getString(R.string.this_screen, baseTitle) else baseTitle
+                val screenWidthDp = if (role == current) {
+                    resources.configuration.screenWidthDp
+                } else {
+                    Screens.widthDp(activity, role)
+                }
+                if (screenWidthDp == null) {
+                    // Cover screen never seen yet (or this phone only has one screen).
+                    pref.isEnabled = false
+                    pref.setSummaryProvider(null)
+                    pref.summary = getString(R.string.cover_not_seen)
+                    continue
+                }
+                pref.isEnabled = true
+                pref.entries = pref.entryValues.map { value ->
+                    val percent = value.toString().toInt()
+                    val width = pageWidth(screenWidthDp, percent)
+                    getString(R.string.ui_scale_entry, percent, width, layoutName(width))
+                }.toTypedArray()
+                pref.setSummaryProvider { p ->
+                    val percent = (p as ListPreference).value?.toIntOrNull() ?: 100
+                    val width = pageWidth(screenWidthDp, percent)
+                    getString(R.string.ui_scale_summary, percent, width, layoutName(width))
+                }
             }
         }
 

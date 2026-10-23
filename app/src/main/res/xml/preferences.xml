@@ -11,8 +11,14 @@
             app:defaultValue="100"
             app:entries="@array/ui_scale_values"
             app:entryValues="@array/ui_scale_values"
-            app:key="ui_scale"
-            app:title="@string/pref_ui_scale" />
+            app:key="ui_scale_main"
+            app:title="@string/pref_ui_scale_main" />
+        <ListPreference
+            app:defaultValue="100"
+            app:entries="@array/ui_scale_values"
+            app:entryValues="@array/ui_scale_values"
+            app:key="ui_scale_cover"
+            app:title="@string/pref_ui_scale_cover" />
         <ListPreference
             app:defaultValue="top"
             app:entries="@array/bar_position_entries"
