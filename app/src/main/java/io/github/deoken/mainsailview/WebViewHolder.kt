@@ -101,10 +101,10 @@ object WebViewHolder {
     }
 
     /**
-     * Reloads the page if Mainsail lost its connection to Moonraker (or the page itself
-     * failed to load). [immediate] reloads on the first sign of it, e.g. on returning to
-     * the app; otherwise it must be seen on two checks in a row, so Mainsail's own quick
-     * reconnect attempts get a chance first.
+     * Reconnects Mainsail if it lost its connection to Moonraker (or reloads the page if
+     * the page itself failed to load). [immediate] acts on the first sign of it, e.g. on
+     * returning to the app; otherwise it must be seen on two checks in a row, so Mainsail's
+     * own quick reconnect attempts get a chance first.
      */
     fun checkConnection(immediate: Boolean) {
         val wv = webView ?: return
@@ -115,7 +115,15 @@ object WebViewHolder {
         }
         wv.evaluateJavascript("window.__mainsailView ? window.__mainsailView.connectionLost() : false") { result ->
             val lost = result == "true"
-            if (lost && (immediate || lostAtLastCheck)) reload() else lostAtLastCheck = lost
+            if (lost && (immediate || lostAtLastCheck)) reconnect() else lostAtLastCheck = lost
+        }
+    }
+
+    /** Mainsail's own "Try again" (no page reload); a full reload only if that's unavailable. */
+    private fun reconnect() {
+        lostAtLastCheck = false
+        webView?.evaluateJavascript("window.__mainsailView ? window.__mainsailView.reconnect() : false") { result ->
+            if (result != "true") reload()
         }
     }
 

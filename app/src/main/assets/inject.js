@@ -1,6 +1,6 @@
 // Injected into every Mainsail page at document start (see WebViewHolder). It:
 // - pauses webcams while the app is in the background and restarts them on return,
-// - lets the app see whether Mainsail lost its Moonraker connection,
+// - lets the app see whether Mainsail lost its Moonraker connection and reconnect it,
 // - reports fullscreen elements (for picture-in-picture),
 // - drops a text box's focus on taps elsewhere (stops the keyboard popping back up),
 // - routes <a download href="blob:/data:"> saves to the native "Save as" picker.
@@ -58,6 +58,22 @@
     mv.connectionLost = function () {
         if (!mainSocket) return false;
         return mainSocket.readyState === NativeWS.CLOSING || mainSocket.readyState === NativeWS.CLOSED;
+    };
+
+    // Does what Mainsail's own "Try again" button does (TheConnectingDialog.reconnect):
+    // reconnects and reloads the printer data without reloading the page. Returns false
+    // if this Mainsail doesn't look as expected, so the app can reload the page instead.
+    mv.reconnect = function () {
+        var root = document.querySelector('[data-app]') || document.getElementById('app');
+        var vm = root && root.__vue__;
+        if (!vm || !vm.$socket || typeof vm.$socket.connect !== 'function') return false;
+        try {
+            if (vm.$store) vm.$store.dispatch('socket/setData', { connectingFailed: false });
+            vm.$socket.connect();
+            return true;
+        } catch (e) {
+            return false;
+        }
     };
 
     function suspend(pc) {

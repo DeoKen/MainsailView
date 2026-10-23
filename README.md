@@ -16,8 +16,9 @@ in a WebView that stays connected while you're in other apps.
   itself. The notification's **Close** button, or swiping it out of recents, closes it right away.
 - Uploads use the system file picker (any file type, so .gcode / .cfg / .conf all show).
 - Downloads ask where to save each file.
-- If Mainsail lost its printer connection while the app was away (e.g. phone folded and
-  locked), the page reloads by itself on return; failed page loads are retried.
+- If Mainsail lost its printer connection (e.g. phone folded and locked), the app does what
+  Mainsail's "Try again" button does, on return and every 10 s after, until it reconnects;
+  no page reload. Failed page loads are retried.
 - Fullscreen works like Chrome: the webcam video's fullscreen button fills the screen (Back
   exits), and going to the home screen from there shrinks it into a picture-in-picture
   window. Closing that window keeps the app running in the background.
