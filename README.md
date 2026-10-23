@@ -20,8 +20,8 @@ in a WebView that stays connected while you're in other apps.
 
 ## Getting the APK
 
-Every push builds a debug APK in GitHub Actions: open the **Actions** tab, pick the latest
-**Build APK** run and download the `MainsailView-debug-apk` artifact (a zip containing the APK).
+Builds run only when started by hand: open the **Actions** tab, choose **Build APK**, press
+**Run workflow**, then open the finished run and download the `MainsailView-debug-apk` artifact (a zip containing the APK).
 
 The APK is signed with the committed `app/debug.keystore`, so new builds install over
 old ones without losing settings. That key is public, so don't reuse it for anything else.
