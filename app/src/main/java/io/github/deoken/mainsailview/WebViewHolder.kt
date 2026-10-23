@@ -60,6 +60,15 @@ object WebViewHolder {
     private var lostAtLastCheck = false
     private const val MAX_LOAD_RETRIES = 40 // every 3 s, so about 2 minutes
 
+    // UI scale is done by the page itself (viewport width), so pinch-zoom works on top of it:
+    // the page is laid out (WebView width / scale) CSS px wide and zoomed out to fit.
+    @Volatile
+    private var uiScale = 1f
+
+    @Volatile
+    private var viewWidthDp = 0f
+    private var appliedScale = "" // "width:scale" last applied to the current page
+
     /** Shape of the element shown fullscreen (e.g. a webcam), for the PiP window. */
     var fullscreenWidth = 16
         private set
@@ -129,6 +138,34 @@ object WebViewHolder {
         }
     }
 
+    /** Sets the UI scale for the screen the app is on (1 = Mainsail's normal layout). */
+    fun setUiScale(scale: Float) {
+        uiScale = scale
+        applyScale(force = false)
+    }
+
+    /** Page width for the current UI scale, or 0 for Mainsail's own (device width). */
+    private fun pageWidth(): Int =
+        if (uiScale == 1f || viewWidthDp <= 0f) 0 else Math.round(viewWidthDp / uiScale)
+
+    /**
+     * Applies the UI scale to the page and fits it to the screen. Only when the width or
+     * scale actually changed (or [force] for a new page), so a pinch-zoom isn't undone by
+     * e.g. the keyboard opening.
+     */
+    private fun applyScale(force: Boolean) {
+        val wv = webView ?: return
+        if (viewWidthDp <= 0f) return
+        val width = pageWidth()
+        val key = "$width:$uiScale"
+        if (!force && key == appliedScale) return
+        appliedScale = key
+        wv.evaluateJavascript("window.__mainsailView && window.__mainsailView.applyScale($width)") {
+            // zoomBy is clamped to the smallest zoom, which is "page fits the screen width".
+            main.postDelayed({ webView?.zoomBy(0.01f) }, 150)
+        }
+    }
+
     /** Takes the focus out of the page's text box, if one has it (see MainActivity). */
     fun blurTextField() {
         webView?.evaluateJavascript("window.__mainsailView && window.__mainsailView.blurTextField()", null)
@@ -143,6 +180,7 @@ object WebViewHolder {
     }
 
     fun destroy() {
+        RelaySockets.closeAll()
         val wv = webView ?: return
         webView = null
         wrapper = null
@@ -166,12 +204,23 @@ object WebViewHolder {
             // Pinch-to-zoom, without the old on-screen +/- buttons.
             builtInZoomControls = true
             displayZoomControls = false
+            // Honour the page's viewport width (set by inject.js for UI scale) and start
+            // zoomed out to fit it.
+            useWideViewPort = true
+            loadWithOverviewMode = true
+        }
+        wv.addOnLayoutChangeListener { v, left, _, right, _, oldLeft, _, oldRight, _ ->
+            if (right - left == oldRight - oldLeft) return@addOnLayoutChangeListener
+            viewWidthDp = (right - left) / v.resources.displayMetrics.density
+            applyScale(force = false)
         }
         // Keep the renderer at foreground priority even while hidden so Android doesn't
         // kill it (and with it the websocket) when memory gets tight.
         wv.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
         CookieManager.getInstance().setAcceptCookie(true)
         wv.addJavascriptInterface(Bridge, "MainsailViewBridge")
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) RelaySockets.install(wv)
+        else Diag.log("This WebView can't relay the printer connection; using the page's own")
         hasDocumentStartScript = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
         if (hasDocumentStartScript) WebViewCompat.addDocumentStartJavaScript(wv, injectJs, setOf("*"))
         wv.webViewClient = client
@@ -224,6 +273,10 @@ object WebViewHolder {
         @JavascriptInterface
         fun log(message: String) = Diag.log("Page: $message")
 
+        /** Page width for UI scale (0 = Mainsail's own), read as the page starts. */
+        @JavascriptInterface
+        fun pageWidth(): Int = WebViewHolder.pageWidth()
+
         @JavascriptInterface
         fun fullscreenState(on: Boolean, width: Int, height: Int) {
             if (!on) return
@@ -255,6 +308,8 @@ object WebViewHolder {
 
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
             if (url != "about:blank") Diag.log("Loading $url")
+            RelaySockets.closeAll() // connections belong to the page being replaced
+            appliedScale = ""
             pageFailed = false
             if (!hasDocumentStartScript) view.evaluateJavascript(injectJs, null)
             host?.onNavigationChanged()
@@ -262,6 +317,7 @@ object WebViewHolder {
 
         override fun onPageFinished(view: WebView, url: String?) {
             if (!pageFailed) loadRetries = 0
+            applyScale(force = true)
             if (!hasDocumentStartScript) view.evaluateJavascript(injectJs, null)
             if (clearHistoryOnLoad && url != "about:blank") {
                 clearHistoryOnLoad = false

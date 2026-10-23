@@ -40,7 +40,7 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
     private lateinit var root: LinearLayout
     private lateinit var bar: View
     private lateinit var progress: LinearProgressIndicator
-    private lateinit var container: ScaledFrameLayout
+    private lateinit var container: FrameLayout
     private lateinit var emptyView: TextView
     private lateinit var printerTabs: TabLayout
     private lateinit var btnBack: ImageButton
@@ -172,9 +172,9 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         if (Prefs.printers(this).any { it.id == id }) Prefs.setSelectedPrinter(this, id)
     }
 
-    /** UI scale for the screen we're on (cover or main), applied by resizing the page. */
+    /** UI scale for the screen we're on (cover or main); the page applies it (see WebViewHolder). */
     private fun applyUiScale() {
-        container.contentScale = Prefs.uiScale(this, Screens.role)
+        WebViewHolder.setUiScale(Prefs.uiScale(this, Screens.role))
     }
 
     // --- Page fullscreen (WebChromeClient custom view) and picture-in-picture ---

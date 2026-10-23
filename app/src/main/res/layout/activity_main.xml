@@ -67,7 +67,7 @@
         android:layout_height="wrap_content"
         android:visibility="invisible" />
 
-    <io.github.deoken.mainsailview.ScaledFrameLayout
+    <FrameLayout
         android:id="@+id/webContainer"
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -84,5 +84,5 @@
             android:text="@string/no_printers"
             android:textAppearance="?attr/textAppearanceBodyLarge"
             android:visibility="gone" />
-    </io.github.deoken.mainsailview.ScaledFrameLayout>
+    </FrameLayout>
 </LinearLayout>

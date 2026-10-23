@@ -41,11 +41,91 @@
     var mainSocketUrl = null;
     var mainSocket = null;
     var lastMessageAt = 0;
+    // This script also runs in embedded frames (e.g. a webcam player); only the page
+    // itself logs, relays and watches the printer connection.
+    var isTop = window.top === window;
 
     function log(message) {
+        if (!isTop) return;
         try {
             if (window.MainsailViewBridge) window.MainsailViewBridge.log(message);
         } catch (e) {}
+    }
+
+    // RelaySocket: a WebSocket look-alike whose connection is held by the app's own process
+    // (RelaySockets.kt), which keeps answering the printer while the phone has this page
+    // frozen and hands over everything that arrived once the page runs again.
+    var relayBridge = isTop ? window.MainsailViewSocket : null;
+    var relays = {};
+    var relayCounter = 0;
+    function RelaySocket(url) {
+        this.url = new URL(url, location.href).href;
+        this.readyState = 0;
+        this.protocol = '';
+        this.extensions = '';
+        this.binaryType = 'blob';
+        this.bufferedAmount = 0;
+        this.onopen = this.onmessage = this.onclose = this.onerror = null;
+        this._listeners = {};
+        this._id = ++relayCounter;
+        relays[this._id] = this;
+        relayBridge.postMessage(JSON.stringify({ t: 'open', id: this._id, url: this.url }));
+    }
+    ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'].forEach(function (name, i) {
+        RelaySocket[name] = i;
+        RelaySocket.prototype[name] = i;
+    });
+    RelaySocket.prototype.send = function (data) {
+        if (this.readyState === 0) throw new DOMException('Still in CONNECTING state.', 'InvalidStateError');
+        if (this.readyState !== 1) return;
+        relayBridge.postMessage(JSON.stringify({ t: 'send', id: this._id, data: String(data) }));
+    };
+    RelaySocket.prototype.close = function (code, reason) {
+        if (this.readyState >= 2) return;
+        this.readyState = 2;
+        relayBridge.postMessage(JSON.stringify({ t: 'close', id: this._id, code: code || 1000, reason: reason || '' }));
+    };
+    RelaySocket.prototype.addEventListener = function (type, fn) {
+        (this._listeners[type] = this._listeners[type] || []).push(fn);
+    };
+    RelaySocket.prototype.removeEventListener = function (type, fn) {
+        var list = this._listeners[type] || [];
+        var i = list.indexOf(fn);
+        if (i >= 0) list.splice(i, 1);
+    };
+    RelaySocket.prototype.dispatchEvent = function (event) {
+        var self = this;
+        var handler = self['on' + event.type];
+        if (typeof handler === 'function') handler.call(self, event);
+        (self._listeners[event.type] || []).slice().forEach(function (fn) {
+            if (typeof fn === 'function') fn.call(self, event);
+            else if (fn && typeof fn.handleEvent === 'function') fn.handleEvent(event);
+        });
+        return true;
+    };
+    if (relayBridge) {
+        relayBridge.onmessage = function (e) {
+            var m;
+            try {
+                m = JSON.parse(e.data);
+            } catch (err) {
+                return;
+            }
+            var ws = relays[m.id];
+            if (!ws) return;
+            if (m.t === 'open') {
+                ws.readyState = 1;
+                ws.dispatchEvent(new Event('open'));
+            } else if (m.t === 'msg') {
+                if (ws.readyState === 1) ws.dispatchEvent(new MessageEvent('message', { data: m.data }));
+            } else if (m.t === 'close') {
+                delete relays[m.id];
+                var wasOpen = ws.readyState === 1 || ws.readyState === 2;
+                ws.readyState = 3;
+                if (!m.clean && !wasOpen) ws.dispatchEvent(new Event('error'));
+                ws.dispatchEvent(new CloseEvent('close', { code: m.code, reason: m.reason, wasClean: !!m.clean }));
+            }
+        };
     }
     function ago(t) {
         return t ? Math.round((Date.now() - t) / 1000) + ' s ago' : 'never';
@@ -78,9 +158,16 @@
 
     if (NativeWS) {
         var WrappedWS = function (url, protocols) {
-            var ws = protocols === undefined ? new NativeWS(url) : new NativeWS(url, protocols);
-            if (/\/websocket(\?|$)/.test(ws.url)) {
-                if (mainSocketUrl === null) mainSocketUrl = ws.url;
+            var isMoonraker = /\/websocket(\?|$)/.test(new URL(url, location.href).pathname + '?');
+            var ws;
+            if (isMoonraker && relayBridge && protocols === undefined) ws = new RelaySocket(url);
+            else ws = protocols === undefined ? new NativeWS(url) : new NativeWS(url, protocols);
+            if (isTop && isMoonraker) {
+                if (mainSocketUrl === null) {
+                    mainSocketUrl = ws.url;
+                    log(ws instanceof RelaySocket ? 'Printer connection is relayed through the app'
+                        : 'Printer connection is NOT relayed (WebView too old?)');
+                }
                 if (ws.url === mainSocketUrl) {
                     mainSocket = ws;
                     watchMainSocket(ws);
@@ -125,9 +212,13 @@
     var recoveryTimer = null;
     function scheduleRecovery() {
         if (recoveryTimer) return;
+        log('Will press Try again in 6 s if still disconnected');
         recoveryTimer = setTimeout(function () {
             recoveryTimer = null;
-            if (!mv.connectionLost()) return;
+            if (!mv.connectionLost()) {
+                log('Reconnected by itself');
+                return;
+            }
             log('Still disconnected: pressing Try again');
             if (!mv.reconnect()) log('Try again is not available in this Mainsail');
         }, 6000);
@@ -173,7 +264,7 @@
 
     // Notes when the page itself was paused (frozen or heavily throttled by the phone).
     var lastTick = Date.now();
-    setInterval(function () {
+    if (isTop) setInterval(function () {
         var now = Date.now();
         if (now - lastTick > 15000) {
             log('Page was paused for ' + Math.round((now - lastTick) / 1000) + ' s' + (forcedHidden ? ' (app in background)' : ''));
@@ -242,6 +333,37 @@
             } catch (e) {}
         });
     };
+
+    // UI scale: Mainsail picks its layout (mobile/tablet/desktop/widescreen) from the page
+    // width, so the app asks for a page of (screen width / scale) CSS px and zooms out to
+    // fit it. Pinch-zoom then works on top, as on any page. width 0 = Mainsail's own.
+    mv.applyScale = function (width) {
+        if (!isTop) return;
+        var content = width > 0 ? 'width=' + width : 'width=device-width,initial-scale=1.0';
+        var metas = document.querySelectorAll('meta[name="viewport"]');
+        var meta = metas[0];
+        if (!meta) {
+            if (!document.head) return;
+            meta = document.createElement('meta');
+            meta.name = 'viewport';
+            document.head.appendChild(meta);
+        }
+        for (var i = 1; i < metas.length; i++) metas[i].remove();
+        if (meta.content !== content) meta.content = content;
+    };
+
+    // Apply as soon as the page's own viewport tag is parsed, before Mainsail lays out; the
+    // app applies it again once the page has loaded and whenever the width or scale changes.
+    if (isTop) {
+        var viewportWatcher = new MutationObserver(function () {
+            if (!document.querySelector('meta[name="viewport"]')) return;
+            viewportWatcher.disconnect();
+            try {
+                mv.applyScale(window.MainsailViewBridge ? window.MainsailViewBridge.pageWidth() : 0);
+            } catch (e) {}
+        });
+        viewportWatcher.observe(document, { childList: true, subtree: true });
+    }
 
     // Fullscreen (e.g. the webcam video's own fullscreen button): tell the app the shape of
     // what went fullscreen, so its picture-in-picture window matches.

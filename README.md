@@ -9,7 +9,9 @@ in a WebView that stays connected while you're in other apps.
   or widescreen layout (and the dashboard you set up for it). It is a percentage of whichever screen
   is in use, so a foldable's cover and main screens each adapt; Settings shows the resulting layout.
 - Back / forward / reload buttons, and pinch-to-zoom. The toolbar can sit at the top or bottom.
-- A foreground service (with its notification) keeps the websocket alive in the background.
+- A foreground service (with its notification) keeps the app alive in the background, and
+  Mainsail's printer connection is held by the app itself (not the page), so it keeps
+  answering the printer even while the phone has the page frozen.
 - Webcams pause in the background: Mainsail stops MJPEG itself, and the app closes WebRTC
   streams and makes Mainsail reconnect them when you come back.
 - After a configurable time in the background (default 10 min, 0 = never) the app closes
