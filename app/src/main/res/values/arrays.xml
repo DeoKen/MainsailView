@@ -1,0 +1,10 @@
+<resources>
+    <string-array name="bar_position_entries">
+        <item>@string/top</item>
+        <item>@string/bottom</item>
+    </string-array>
+    <string-array name="bar_position_values">
+        <item>top</item>
+        <item>bottom</item>
+    </string-array>
+</resources>

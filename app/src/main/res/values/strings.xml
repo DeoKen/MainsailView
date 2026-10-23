@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">MainsailView</string>
+    <string name="settings">Settings</string>
+    <string name="back">Back</string>
+    <string name="forward">Forward</string>
+    <string name="reload">Reload</string>
+    <string name="no_address">No address set for this printer.\nTap ⚙ to add one.</string>
+    <string name="printer_1">Printer 1</string>
+    <string name="printer_2">Printer 2</string>
+    <string name="category_printer_1">Printer 1</string>
+    <string name="category_printer_2">Printer 2</string>
+    <string name="category_behaviour">Behaviour</string>
+    <string name="pref_name">Name</string>
+    <string name="pref_address">Address</string>
+    <string name="pref_address_hint">e.g. 192.168.1.50 or http://voron.local:81</string>
+    <string name="pref_bar_position">Toolbar position</string>
+    <string name="pref_kill_minutes">Close after this long in background (minutes)</string>
+    <string name="pref_kill_minutes_summary">%1$s min. 0 = never close.</string>
+    <string name="pref_keep_screen_on">Keep screen on</string>
+    <string name="pref_keep_screen_on_summary">While the app is on screen</string>
+    <string name="top">Top</string>
+    <string name="bottom">Bottom</string>
+    <string name="notif_channel">Keep connected</string>
+    <string name="notif_title">Keeping printers connected</string>
+    <string name="notif_text">Tap to open. Closes after %1$d min in background.</string>
+    <string name="notif_text_never">Tap to open.</string>
+    <string name="close">Close</string>
+    <string name="downloading">Downloading %1$s…</string>
+    <string name="saved">Saved %1$s</string>
+    <string name="save_failed">Download failed: %1$s</string>
+    <string name="no_app">No app available to open this</string>
+</resources>

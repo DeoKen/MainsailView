@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/category_printer_1">
+        <EditTextPreference
+            app:defaultValue="@string/printer_1"
+            app:key="printer1_name"
+            app:title="@string/pref_name"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:dialogMessage="@string/pref_address_hint"
+            app:key="printer1_url"
+            app:title="@string/pref_address"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/category_printer_2">
+        <EditTextPreference
+            app:defaultValue="@string/printer_2"
+            app:key="printer2_name"
+            app:title="@string/pref_name"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:dialogMessage="@string/pref_address_hint"
+            app:key="printer2_url"
+            app:title="@string/pref_address"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/category_behaviour">
+        <ListPreference
+            app:defaultValue="top"
+            app:entries="@array/bar_position_entries"
+            app:entryValues="@array/bar_position_values"
+            app:key="bar_position"
+            app:title="@string/pref_bar_position"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="10"
+            app:key="kill_minutes"
+            app:title="@string/pref_kill_minutes" />
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="keep_screen_on"
+            app:summary="@string/pref_keep_screen_on_summary"
+            app:title="@string/pref_keep_screen_on" />
+    </PreferenceCategory>
+</PreferenceScreen>
