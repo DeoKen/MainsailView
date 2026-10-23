@@ -1,6 +1,7 @@
 package io.github.deoken.mainsailview
 
 import android.Manifest
+import android.app.PictureInPictureParams
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -9,6 +10,7 @@ import android.hardware.display.DisplayManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.util.Rational
 import android.view.View
 import android.view.WindowManager
 import android.webkit.ValueCallback
@@ -160,6 +162,41 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         super.onStop()
     }
 
+    // --- Picture-in-picture (only while Mainsail's Webcam page is open) ---
+
+    private fun pipParams(): PictureInPictureParams {
+        // Android only accepts aspect ratios between about 1:2.39 and 2.39:1.
+        val ratio = (WebViewHolder.camWidth.toFloat() / WebViewHolder.camHeight).coerceIn(0.42f, 2.39f)
+        val builder = PictureInPictureParams.Builder().setAspectRatio(Rational((ratio * 1000).toInt(), 1000))
+        if (Build.VERSION.SDK_INT >= 31) builder.setAutoEnterEnabled(WebViewHolder.onCamPage)
+        return builder.build()
+    }
+
+    override fun onCamStateChanged() {
+        setPictureInPictureParams(pipParams())
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // Android 12+ enters PiP by itself through setAutoEnterEnabled.
+        if (Build.VERSION.SDK_INT < 31 && WebViewHolder.onCamPage) {
+            try {
+                enterPictureInPictureMode(pipParams())
+            } catch (e: IllegalStateException) {
+                // PiP turned off for this app in system settings.
+            }
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        val normal = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
+        bar.visibility = normal
+        if (isInPictureInPictureMode) progress.visibility = View.GONE
+        WebViewHolder.setPip(isInPictureInPictureMode)
+        App.instance.notePip(isInPictureInPictureMode)
+    }
+
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         WebViewHolder.updateScreen(this)
@@ -295,6 +332,7 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
     }
 
     override fun onProgress(progress: Int) {
+        if (isInPictureInPictureMode) return
         this.progress.visibility = if (progress in 1..99) View.VISIBLE else View.INVISIBLE
         this.progress.setProgressCompat(progress, true)
     }

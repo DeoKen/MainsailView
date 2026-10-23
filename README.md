@@ -16,6 +16,8 @@ in a WebView that stays connected while you're in other apps.
   itself. The notification's **Close** button, or swiping it out of recents, closes it right away.
 - Uploads use the system file picker (any file type, so .gcode / .cfg / .conf all show).
 - Downloads ask where to save each file.
+- Leaving the app on Mainsail's Webcam page shrinks it to a picture-in-picture window showing
+  the first camera. Closing that window keeps the app running in the background.
 - Optional keep-screen-on while visible. Follows the system light/dark theme.
 
 ## Getting the APK

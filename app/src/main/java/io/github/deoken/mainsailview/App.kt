@@ -94,6 +94,18 @@ class App : Application(), DefaultLifecycleObserver {
         return SystemClock.elapsedRealtime() - backgroundSince >= minutes * 60_000L
     }
 
+    private var inPip = false
+    private var pipEndedAt = 0L
+
+    /** Tracks picture-in-picture so closing its window isn't mistaken for swiping the app away. */
+    fun notePip(active: Boolean) {
+        inPip = active
+        if (!active) pipEndedAt = SystemClock.elapsedRealtime()
+    }
+
+    /** True in PiP or just after it, when a removed task means the PiP window was closed. */
+    fun pipJustDismissed() = inPip || SystemClock.elapsedRealtime() - pipEndedAt < 5_000
+
     /** Closes the page, the notification, every screen, and finally the process. */
     fun shutdown() {
         handler.removeCallbacksAndMessages(null)

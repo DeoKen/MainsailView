@@ -130,6 +130,59 @@
         mv.applyScale();
     });
 
+    // Picture-in-picture: the app offers PiP while Mainsail's Webcam page (/cam) is open,
+    // and in PiP shows just the first camera, filling the window.
+    function firstCam() {
+        var panel = document.querySelector('.webcam-panel');
+        if (!panel) return null;
+        var media = panel.querySelector('canvas, video, img, iframe');
+        if (!media) return null;
+        return { media: media, box: media.closest('.webcamBackground') || media };
+    }
+
+    var lastCamState = '';
+    function reportCamState() {
+        var bridge = window.MainsailViewBridge;
+        if (!bridge) return;
+        var onCamPage = /\/cam\/?$/.test(location.pathname);
+        var w = 16, h = 9;
+        var cam = onCamPage ? firstCam() : null;
+        if (cam) {
+            var r = cam.media.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) {
+                w = Math.round(r.width);
+                h = Math.round(r.height);
+            }
+        }
+        var state = onCamPage + ':' + w + 'x' + h;
+        if (state === lastCamState) return;
+        lastCamState = state;
+        bridge.camState(onCamPage, w, h);
+    }
+    setInterval(reportCamState, 1000);
+
+    var pipStyle = null;
+    mv.setPip = function (on) {
+        document.documentElement.classList.toggle('mv-pip', on);
+        document.querySelectorAll('.mv-pip-target').forEach(function (el) { el.classList.remove('mv-pip-target'); });
+        if (!on) return;
+        if (!pipStyle) {
+            pipStyle = document.createElement('style');
+            pipStyle.textContent =
+                'html.mv-pip, html.mv-pip body { overflow: hidden !important; background: #000 !important; }' +
+                'html.mv-pip .mv-pip-target { position: fixed !important; top: 0 !important; left: 0 !important;' +
+                ' width: 100vw !important; height: 100vh !important; max-width: none !important; margin: 0 !important;' +
+                ' padding: 0 !important; z-index: 2147483647 !important; background: #000 !important;' +
+                ' display: flex !important; align-items: center !important; justify-content: center !important; }' +
+                'html.mv-pip .mv-pip-target canvas, html.mv-pip .mv-pip-target video, html.mv-pip .mv-pip-target img,' +
+                ' html.mv-pip .mv-pip-target iframe, html.mv-pip canvas.mv-pip-target, html.mv-pip video.mv-pip-target,' +
+                ' html.mv-pip img.mv-pip-target { width: 100% !important; height: 100% !important; object-fit: contain !important; }';
+            document.head.appendChild(pipStyle);
+        }
+        var cam = firstCam();
+        if (cam) cam.box.classList.add('mv-pip-target');
+    };
+
     mv.saveUrl = function (href, fileName) {
         fetch(href)
             .then(function (r) { return r.blob(); })

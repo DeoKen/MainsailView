@@ -46,9 +46,9 @@ class KeepAliveService : Service() {
         return START_NOT_STICKY
     }
 
-    /** Swiping the app away from recents closes it completely. */
+    /** Swiping the app away from recents closes it completely; closing the PiP window doesn't. */
     override fun onTaskRemoved(rootIntent: Intent?) {
-        App.instance.shutdown()
+        if (!App.instance.pipJustDismissed()) App.instance.shutdown()
     }
 
     private fun createChannel() {

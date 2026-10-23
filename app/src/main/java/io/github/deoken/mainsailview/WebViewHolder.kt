@@ -39,6 +39,7 @@ object WebViewHolder {
         fun onNavigationChanged()
         fun onProgress(progress: Int)
         fun onWebViewReset()
+        fun onCamStateChanged()
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -53,6 +54,19 @@ object WebViewHolder {
     /** The WebView's width in CSS px (dp), read by the page to size its viewport. */
     @Volatile
     private var viewWidthDp = 0f
+
+    /** True while Mainsail's Webcam page is open, i.e. when picture-in-picture makes sense. */
+    var onCamPage = false
+        private set
+
+    /** Shape of the first webcam on that page, for the PiP window. */
+    var camWidth = 16
+        private set
+    var camHeight = 9
+        private set
+
+    @Volatile
+    private var inPip = false
 
     /** Which physical screen (cover or main) the WebView is currently on. */
     @Volatile
@@ -99,6 +113,13 @@ object WebViewHolder {
         val role = Screens.current(context).role
         if (role == screenRole && !force) return
         screenRole = role
+        applyUiScale()
+    }
+
+    /** Switches the page between showing only the first webcam (PiP) and normal. */
+    fun setPip(on: Boolean) {
+        inPip = on
+        webView?.evaluateJavascript("window.__mainsailView && window.__mainsailView.setPip($on)", null)
         applyUiScale()
     }
 
@@ -203,7 +224,17 @@ object WebViewHolder {
 
     private object Bridge {
         @JavascriptInterface
-        fun uiScale(): Float = Prefs.uiScale(App.instance, screenRole)
+        fun uiScale(): Float = if (inPip) 1f else Prefs.uiScale(App.instance, screenRole)
+
+        @JavascriptInterface
+        fun camState(onCamPage: Boolean, width: Int, height: Int) {
+            main.post {
+                WebViewHolder.onCamPage = onCamPage
+                camWidth = width.coerceAtLeast(1)
+                camHeight = height.coerceAtLeast(1)
+                host?.onCamStateChanged()
+            }
+        }
 
         @JavascriptInterface
         fun viewWidthDp(): Float = viewWidthDp
