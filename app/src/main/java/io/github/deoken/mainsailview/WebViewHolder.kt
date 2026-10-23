@@ -161,6 +161,9 @@ object WebViewHolder {
             javaScriptCanOpenWindowsAutomatically = true
             mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             allowFileAccess = false
+            // Pinch-to-zoom, without the old on-screen +/- buttons.
+            builtInZoomControls = true
+            displayZoomControls = false
         }
         // Keep the renderer at foreground priority even while hidden so Android doesn't
         // kill it (and with it the websocket) when memory gets tight.

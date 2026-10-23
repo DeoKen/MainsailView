@@ -8,7 +8,7 @@ in a WebView that stays connected while you're in other apps.
 - **UI scale** (separate for a foldable's main and cover screens, told apart by whether the window spans the fold) changes the page width Mainsail sees, so you can choose its mobile, tablet, desktop
   or widescreen layout (and the dashboard you set up for it). It is a percentage of whichever screen
   is in use, so a foldable's cover and main screens each adapt; Settings shows the resulting layout.
-- Back / forward / reload buttons. The toolbar can sit at the top or bottom.
+- Back / forward / reload buttons, and pinch-to-zoom. The toolbar can sit at the top or bottom.
 - A foreground service (with its notification) keeps the websocket alive in the background.
 - Webcams pause in the background: Mainsail stops MJPEG itself, and the app closes WebRTC
   streams and makes Mainsail reconnect them when you come back.
