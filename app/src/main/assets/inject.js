@@ -1,8 +1,9 @@
-// Injected into every Mainsail page at document start (see WebViewHolder).
-// 1. Tracks WebRTC peer connections so webcams can be paused while the app is in the
-//    background. MJPEG streams are already stopped by Mainsail itself on visibilitychange.
-// 2. Routes <a download href="blob:/data:"> saves (history CSV, settings backup, ...)
-//    to the native "Save as" picker, since WebView can't save those on its own.
+// Injected into every Mainsail page at document start (see WebViewHolder). It:
+// - pauses webcams while the app is in the background and restarts them on return,
+// - lets the app see whether Mainsail lost its Moonraker connection,
+// - reports fullscreen elements (for picture-in-picture),
+// - drops a text box's focus on taps elsewhere (stops the keyboard popping back up),
+// - routes <a download href="blob:/data:"> saves to the native "Save as" picker.
 (function () {
     if (window.__mainsailView) return;
     var mv = (window.__mainsailView = {});
@@ -31,15 +32,21 @@
         window.RTCPeerConnection = Wrapped;
     }
 
-    // Track the page's websockets (without changing them) so the app can tell, when it comes
-    // back to the foreground, whether Mainsail's connection to Moonraker was lost.
+    // Watch the page's own Moonraker websocket (without changing it) so the app can tell,
+    // when it comes back to the foreground, whether Mainsail lost its connection. Only the
+    // first Moonraker URL the page opens counts, and its reconnects to that same URL:
+    // Mainsail's printer farm opens /websocket connections to other printers too, and one
+    // of those being offline must not count as this printer's connection being lost.
     var NativeWS = window.WebSocket;
-    var sockets = [];
+    var mainSocketUrl = null;
+    var mainSocket = null;
     if (NativeWS) {
         var WrappedWS = function (url, protocols) {
             var ws = protocols === undefined ? new NativeWS(url) : new NativeWS(url, protocols);
-            sockets.push(ws);
-            if (sockets.length > 20) sockets.shift();
+            if (/\/websocket(\?|$)/.test(ws.url)) {
+                if (mainSocketUrl === null) mainSocketUrl = ws.url;
+                if (ws.url === mainSocketUrl) mainSocket = ws;
+            }
             return ws;
         };
         WrappedWS.prototype = NativeWS.prototype;
@@ -47,12 +54,10 @@
         window.WebSocket = WrappedWS;
     }
 
-    // True when the newest Moonraker connection is closed and nothing is reconnecting.
+    // True when Mainsail's latest connection to its printer is closed (it gave up).
     mv.connectionLost = function () {
-        var moonraker = sockets.filter(function (ws) { return /\/websocket(\?|$)/.test(ws.url); });
-        if (!moonraker.length) return false;
-        var state = moonraker[moonraker.length - 1].readyState;
-        return state === NativeWS.CLOSING || state === NativeWS.CLOSED;
+        if (!mainSocket) return false;
+        return mainSocket.readyState === NativeWS.CLOSING || mainSocket.readyState === NativeWS.CLOSED;
     };
 
     function suspend(pc) {

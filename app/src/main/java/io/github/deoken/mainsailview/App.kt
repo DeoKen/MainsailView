@@ -43,8 +43,6 @@ class App : Application(), DefaultLifecycleObserver {
             .apply { setReferenceCounted(false) }
     }
 
-    // Polls rather than posting one long delay: Handler delays don't count deep sleep,
-    // elapsedRealtime() does, so a late check still closes on time once the CPU wakes.
     // While the app is open, watch for Mainsail losing its connection and recover it.
     private val connectionWatchdog = object : Runnable {
         override fun run() {
@@ -56,6 +54,8 @@ class App : Application(), DefaultLifecycleObserver {
     val isInForeground: Boolean
         get() = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
 
+    // Polls rather than posting one long delay: Handler delays don't count deep sleep,
+    // elapsedRealtime() does, so a late check still closes on time once the CPU wakes.
     private val backgroundCheck = object : Runnable {
         override fun run() {
             if (backgroundExpired()) shutdown() else handler.postDelayed(this, CHECK_INTERVAL_MS)

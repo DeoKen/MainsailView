@@ -293,7 +293,7 @@ object WebViewHolder {
             host?.onProgress(newProgress)
         }
 
-        // Fullscreen API (a video's fullscreen button, or double-tapping a webcam).
+        // Fullscreen API, e.g. the webcam video's own fullscreen button.
         override fun onShowCustomView(view: android.view.View, callback: CustomViewCallback) {
             val h = host
             if (h == null) callback.onCustomViewHidden() else h.showFullscreen(view, callback)
