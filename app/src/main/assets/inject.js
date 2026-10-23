@@ -117,43 +117,6 @@
         });
     };
 
-    // UI scale: Mainsail picks its layout (mobile/tablet/desktop/widescreen) from the page
-    // width, so give it a page of (screen width / scale) and shrink that to fit the screen.
-    mv.applyScale = function () {
-        var bridge = window.MainsailViewBridge;
-        if (!bridge) return;
-        var scale = Math.round(bridge.uiScale() * 100) / 100;
-        var width = bridge.viewWidthDp();
-        var content = 'width=device-width,initial-scale=1.0';
-        if (scale > 0 && width > 0 && scale !== 1) {
-            content = 'width=' + Math.round(width / scale) + ',initial-scale=' + scale +
-                ',minimum-scale=' + scale + ',maximum-scale=' + scale;
-        }
-        var metas = document.querySelectorAll('meta[name="viewport"]');
-        var meta = metas[0];
-        if (!meta) {
-            if (!document.head) return;
-            meta = document.createElement('meta');
-            meta.name = 'viewport';
-            document.head.appendChild(meta);
-        }
-        for (var i = 1; i < metas.length; i++) metas[i].remove();
-        if (meta.content !== content) meta.content = content;
-    };
-
-    // Apply as soon as the page's own viewport tag is parsed, before Mainsail lays out.
-    var viewportWatcher = new MutationObserver(function () {
-        if (document.querySelector('meta[name="viewport"]')) {
-            viewportWatcher.disconnect();
-            mv.applyScale();
-        }
-    });
-    viewportWatcher.observe(document, { childList: true, subtree: true });
-    document.addEventListener('DOMContentLoaded', function () {
-        viewportWatcher.disconnect();
-        mv.applyScale();
-    });
-
     // Fullscreen (e.g. the webcam video's own fullscreen button): tell the app the shape of
     // what went fullscreen, so its picture-in-picture window matches.
     function reportFullscreen() {
@@ -214,7 +177,7 @@
         var type = (el.type || '').toLowerCase();
         return ['button', 'checkbox', 'radio', 'range', 'color', 'file', 'submit', 'reset', 'image'].indexOf(type) < 0;
     }
-    document.addEventListener('pointerdown', function (e) {
+    function blurOnOutsideTap(e) {
         var focused = document.activeElement;
         var target = e.target;
         if (!isEditable(focused) || isEditable(target)) return;
@@ -223,7 +186,16 @@
         if (field && field.contains(target)) return;
         if (target && target.closest && target.closest('.v-menu__content')) return;
         focused.blur();
-    }, true);
+    }
+    // All three: taps on e.g. a video's built-in controls don't always produce each one.
+    ['touchstart', 'pointerdown', 'mousedown'].forEach(function (type) {
+        document.addEventListener(type, blurOnOutsideTap, { capture: true, passive: true });
+    });
+
+    // Called by the app when the keyboard closes, so the next tap can't reopen it.
+    mv.blurTextField = function () {
+        if (isEditable(document.activeElement)) document.activeElement.blur();
+    };
 
     // Real taps on download links.
     document.addEventListener('click', function (e) {

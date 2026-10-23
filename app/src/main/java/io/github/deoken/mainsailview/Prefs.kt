@@ -89,12 +89,6 @@ object Prefs {
     fun killMinutes(context: Context): Int =
         sp(context).getString("kill_minutes", null)?.trim()?.toIntOrNull()?.coerceAtLeast(0) ?: 10
 
-    fun fullscreen(context: Context): Boolean =
-        sp(context).getBoolean("fullscreen", false)
-
-    fun setFullscreen(context: Context, on: Boolean) =
-        sp(context).edit { putBoolean("fullscreen", on) }
-
     fun keepScreenOn(context: Context): Boolean =
         sp(context).getBoolean("keep_screen_on", true)
 

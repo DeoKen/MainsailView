@@ -58,6 +58,4 @@
     <string name="screen_cover">Cover screen</string>
     <string name="yes">yes</string>
     <string name="no">no</string>
-    <string name="fullscreen">Fullscreen</string>
-    <string name="fullscreen_hint">Swipe down from the top edge to show the toolbar</string>
 </resources>

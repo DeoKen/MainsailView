@@ -60,10 +60,6 @@ object WebViewHolder {
     private var lostAtLastCheck = false
     private const val MAX_LOAD_RETRIES = 40 // every 3 s, so about 2 minutes
 
-    /** The WebView's width in CSS px (dp), read by the page to size its viewport. */
-    @Volatile
-    private var viewWidthDp = 0f
-
     /** Shape of the element shown fullscreen (e.g. a webcam), for the PiP window. */
     var fullscreenWidth = 16
         private set
@@ -123,9 +119,9 @@ object WebViewHolder {
         }
     }
 
-    /** Re-applies the UI scale setting, e.g. after it changed or the screen size changed. */
-    fun applyUiScale() {
-        webView?.evaluateJavascript("window.__mainsailView && window.__mainsailView.applyScale()", null)
+    /** Takes the focus out of the page's text box, if one has it (see MainActivity). */
+    fun blurTextField() {
+        webView?.evaluateJavascript("window.__mainsailView && window.__mainsailView.blurTextField()", null)
     }
 
     fun suspendCams() {
@@ -157,15 +153,6 @@ object WebViewHolder {
             javaScriptCanOpenWindowsAutomatically = true
             mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             allowFileAccess = false
-            // Honour the page's viewport meta tag, which inject.js rewrites for UI scale.
-            useWideViewPort = true
-        }
-        wv.addOnLayoutChangeListener { v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
-            if (right - left == oldRight - oldLeft && bottom - top == oldBottom - oldTop) return@addOnLayoutChangeListener
-            val widthDp = (right - left) / v.resources.displayMetrics.density
-            if (widthDp <= 0) return@addOnLayoutChangeListener
-            viewWidthDp = widthDp
-            applyUiScale()
         }
         // Keep the renderer at foreground priority even while hidden so Android doesn't
         // kill it (and with it the websocket) when memory gets tight.
@@ -222,9 +209,6 @@ object WebViewHolder {
 
     private object Bridge {
         @JavascriptInterface
-        fun uiScale(): Float = Prefs.uiScale(App.instance, Screens.role)
-
-        @JavascriptInterface
         fun fullscreenState(on: Boolean, width: Int, height: Int) {
             if (!on) return
             main.post {
@@ -233,9 +217,6 @@ object WebViewHolder {
                 host?.onFullscreenAspectChanged()
             }
         }
-
-        @JavascriptInterface
-        fun viewWidthDp(): Float = viewWidthDp
 
         @JavascriptInterface
         fun saveBase64(data: String, mimeType: String?, fileName: String?) {
