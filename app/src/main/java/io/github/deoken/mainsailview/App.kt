@@ -43,7 +43,9 @@ class App : Application(), DefaultLifecycleObserver {
             .apply { setReferenceCounted(false) }
     }
 
-    // While the app is open, watch for Mainsail losing its connection and recover it.
+    // While the app is alive (foreground, or background until the close timer), watch for
+    // Mainsail losing its connection and recover it, so a blip while you're in another app
+    // is already repaired when you come back.
     private val connectionWatchdog = object : Runnable {
         override fun run() {
             WebViewHolder.checkConnection(immediate = false)
@@ -92,7 +94,6 @@ class App : Application(), DefaultLifecycleObserver {
 
     override fun onStop(owner: LifecycleOwner) {
         backgroundSince = SystemClock.elapsedRealtime()
-        handler.removeCallbacks(connectionWatchdog)
         WebViewHolder.suspendCams()
         val minutes = Prefs.killMinutes(this)
         if (minutes > 0) {
