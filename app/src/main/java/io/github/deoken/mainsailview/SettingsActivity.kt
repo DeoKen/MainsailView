@@ -68,6 +68,10 @@ class SettingsActivity : AppCompatActivity() {
                     getString(R.string.pref_kill_minutes_summary, value.toString())
                 }
             }
+            findPreference<Preference>("battery")?.setOnPreferenceClickListener {
+                Battery.requestUnrestricted(requireContext())
+                true
+            }
             rebuildPrinterList()
         }
 
@@ -75,6 +79,9 @@ class SettingsActivity : AppCompatActivity() {
             super.onResume()
             // The screen may have changed (folded/unfolded) since the labels were built.
             setupUiScale()
+            findPreference<Preference>("battery")?.summary = getString(
+                if (Battery.isUnrestricted(requireContext())) R.string.battery_unrestricted else R.string.battery_optimised
+            )
         }
 
         // --- UI scale ---

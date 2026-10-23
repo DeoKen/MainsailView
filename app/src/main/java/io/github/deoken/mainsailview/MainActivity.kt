@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.hardware.display.DisplayManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -24,6 +26,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.android.material.tabs.TabLayout
 
@@ -43,6 +46,19 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
     private var pendingDownload: PendingDownload? = null
     private var updatingTabs = false
     private var shownPrinters: List<Printer> = emptyList()
+
+    // Folding/unfolding can move the window to the other screen without any other callback.
+    // Debounced: Samsung also reports every refresh-rate change as a display change.
+    private val checkScreen = Runnable { WebViewHolder.updateScreen(this, force = false) }
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayChanged(displayId: Int) {
+            root.removeCallbacks(checkScreen)
+            root.postDelayed(checkScreen, 300)
+        }
+
+        override fun onDisplayAdded(displayId: Int) {}
+        override fun onDisplayRemoved(displayId: Int) {}
+    }
 
     private val pickFiles = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val data = result.data
@@ -114,6 +130,7 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
 
         webView = WebViewHolder.attach(this, this, container)
         requestNotificationPermissionOnce()
+        offerBatteryExemptionOnce()
 
         if (savedInstanceState == null && Prefs.printers(this).isEmpty()) openSettings()
     }
@@ -129,7 +146,23 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         }
         updatePrinterTabs()
         loadSelectedPrinter()
-        WebViewHolder.applyUiScale()
+        WebViewHolder.updateScreen(this)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        getSystemService(DisplayManager::class.java).registerDisplayListener(displayListener, null)
+    }
+
+    override fun onStop() {
+        getSystemService(DisplayManager::class.java).unregisterDisplayListener(displayListener)
+        root.removeCallbacks(checkScreen)
+        super.onStop()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        WebViewHolder.updateScreen(this)
     }
 
     override fun onDestroy() {
@@ -189,6 +222,17 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
         Prefs.setAskedNotificationPermission(this)
         notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    private fun offerBatteryExemptionOnce() {
+        if (Prefs.askedBatteryExemption(this) || Battery.isUnrestricted(this)) return
+        Prefs.setAskedBatteryExemption(this)
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.battery_title)
+            .setMessage(R.string.battery_message)
+            .setPositiveButton(R.string.battery_allow) { _, _ -> Battery.requestUnrestricted(this) }
+            .setNegativeButton(R.string.not_now, null)
+            .show()
     }
 
     private fun launchSaveAs(download: PendingDownload) {

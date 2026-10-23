@@ -91,6 +91,12 @@ object Prefs {
     fun keepScreenOn(context: Context): Boolean =
         sp(context).getBoolean("keep_screen_on", true)
 
+    fun askedBatteryExemption(context: Context): Boolean =
+        sp(context).getBoolean("asked_battery_exemption", false)
+
+    fun setAskedBatteryExemption(context: Context) =
+        sp(context).edit { putBoolean("asked_battery_exemption", true) }
+
     fun askedNotificationPermission(context: Context): Boolean =
         sp(context).getBoolean("asked_notification_permission", false)
 

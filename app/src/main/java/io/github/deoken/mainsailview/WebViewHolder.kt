@@ -91,6 +91,17 @@ object WebViewHolder {
         webView?.reload()
     }
 
+    /**
+     * Works out which screen (cover or main) [context]'s window is on and applies that
+     * screen's UI scale. Called on resume, configuration and display changes, and resizes.
+     */
+    fun updateScreen(context: Context, force: Boolean = true) {
+        val role = Screens.current(context)
+        if (role == screenRole && !force) return
+        screenRole = role
+        applyUiScale()
+    }
+
     /** Re-applies the UI scale setting, e.g. after it changed or the screen size changed. */
     fun applyUiScale() {
         webView?.evaluateJavascript("window.__mainsailView && window.__mainsailView.applyScale()", null)
@@ -128,13 +139,13 @@ object WebViewHolder {
             // Honour the page's viewport meta tag, which inject.js rewrites for UI scale.
             useWideViewPort = true
         }
-        wv.addOnLayoutChangeListener { v, left, _, right, _, _, _, _, _ ->
+        wv.addOnLayoutChangeListener { v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            if (right - left == oldRight - oldLeft && bottom - top == oldBottom - oldTop) return@addOnLayoutChangeListener
             val widthDp = (right - left) / v.resources.displayMetrics.density
-            if (widthDp > 0 && widthDp != viewWidthDp) {
-                viewWidthDp = widthDp
-                v.display?.let { screenRole = Screens.current(v.context, it) }
-                applyUiScale()
-            }
+            if (widthDp <= 0) return@addOnLayoutChangeListener
+            viewWidthDp = widthDp
+            v.display?.let { screenRole = Screens.current(v.context, it) }
+            applyUiScale()
         }
         // Keep the renderer at foreground priority even while hidden so Android doesn't
         // kill it (and with it the websocket) when memory gets tight.

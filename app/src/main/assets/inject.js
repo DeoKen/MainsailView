@@ -39,16 +39,47 @@
         suspended.push(pc);
     }
 
+    // MJPEG streams: Mainsail starts/stops them on visibilitychange. Report the page as hidden
+    // ourselves while in the background, so they stop even if WebView doesn't say so, and
+    // report a fresh hidden -> visible on return so they always restart instead of freezing.
+    var forcedHidden = false;
+    function setForcedHidden(on) {
+        if (on) {
+            Object.defineProperty(document, 'visibilityState', { configurable: true, get: function () { return 'hidden'; } });
+            Object.defineProperty(document, 'hidden', { configurable: true, get: function () { return true; } });
+        } else {
+            delete document.visibilityState;
+            delete document.hidden;
+        }
+        forcedHidden = on;
+    }
+    function fireVisibilityChange() {
+        document.dispatchEvent(new Event('visibilitychange'));
+    }
+
     mv.suspendCams = function () {
         isSuspended = true;
         var list = live;
         live = [];
         list.forEach(suspend);
+        if (!forcedHidden) {
+            setForcedHidden(true);
+            fireVisibilityChange();
+        }
     };
 
     // Mainsail's WebRTC streamers (camera-streamer, go2rtc, MediaMTX) restart themselves
     // when their connection reports "disconnected", so fake exactly that.
     mv.resumeCams = function () {
+        if (!forcedHidden) {
+            setForcedHidden(true);
+            fireVisibilityChange();
+        }
+        // Back to the real state: "visible" restarts the streams now; if WebView still says
+        // "hidden", its own visibilitychange will start them a moment later.
+        setForcedHidden(false);
+        fireVisibilityChange();
+
         isSuspended = false;
         var list = suspended;
         suspended = [];
@@ -127,6 +158,27 @@
         if (intercept(this)) return;
         return nativeClick.apply(this, arguments);
     };
+
+    // WebView keeps the last text box (e.g. the console) focused when you tap elsewhere, so
+    // every tap re-opens the keyboard and scrolls back to it. Drop that focus on taps that
+    // land outside it.
+    function isEditable(el) {
+        if (!el || el.nodeType !== 1) return false;
+        if (el.isContentEditable || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+        if (el.tagName !== 'INPUT') return false;
+        var type = (el.type || '').toLowerCase();
+        return ['button', 'checkbox', 'radio', 'range', 'color', 'file', 'submit', 'reset', 'image'].indexOf(type) < 0;
+    }
+    document.addEventListener('pointerdown', function (e) {
+        var focused = document.activeElement;
+        var target = e.target;
+        if (!isEditable(focused) || isEditable(target)) return;
+        // Taps on the field's own icons (e.g. Send) or its dropdown keep the focus.
+        var field = focused.closest ? focused.closest('.v-input') : null;
+        if (field && field.contains(target)) return;
+        if (target && target.closest && target.closest('.v-menu__content')) return;
+        focused.blur();
+    }, true);
 
     // Real taps on download links.
     document.addEventListener('click', function (e) {

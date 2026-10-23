@@ -45,4 +45,11 @@
     <string name="layout_tablet">Tablet</string>
     <string name="layout_desktop">Desktop</string>
     <string name="layout_widescreen">Widescreen</string>
+    <string name="pref_battery">Battery usage</string>
+    <string name="battery_unrestricted">Unrestricted ✓ — Android won\'t freeze the page in the background</string>
+    <string name="battery_optimised">Optimised — Android may freeze or reload the page in the background. Tap to set Unrestricted.</string>
+    <string name="battery_title">Stay connected in the background?</string>
+    <string name="battery_message">With battery optimisation on, Android can freeze or kill the hidden page, which forces Mainsail to reload. Allow the app to run unrestricted so the connection stays up.</string>
+    <string name="battery_allow">Allow</string>
+    <string name="not_now">Not now</string>
 </resources>

@@ -34,6 +34,10 @@
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/category_background">
+        <Preference
+            app:key="battery"
+            app:persistent="false"
+            app:title="@string/pref_battery" />
         <EditTextPreference
             app:defaultValue="10"
             app:key="kill_minutes"

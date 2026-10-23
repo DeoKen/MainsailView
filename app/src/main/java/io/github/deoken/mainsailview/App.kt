@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.Process
 import android.os.SystemClock
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -33,6 +34,14 @@ class App : Application(), DefaultLifecycleObserver {
     /** elapsedRealtime() when the app went to the background, or 0 while in the foreground. */
     private var backgroundSince = 0L
 
+    // Keeps the CPU running while in the background with the screen off, so the page
+    // keeps reading the websocket. Held only until the app returns or closes itself.
+    private val wakeLock: PowerManager.WakeLock by lazy {
+        getSystemService(PowerManager::class.java)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MainsailView:keepConnected")
+            .apply { setReferenceCounted(false) }
+    }
+
     // Polls rather than posting one long delay: Handler delays don't count deep sleep,
     // elapsedRealtime() does, so a late check still closes on time once the CPU wakes.
     private val backgroundCheck = object : Runnable {
@@ -51,6 +60,7 @@ class App : Application(), DefaultLifecycleObserver {
 
     override fun onStart(owner: LifecycleOwner) {
         handler.removeCallbacks(backgroundCheck)
+        releaseWakeLock()
         val expired = backgroundExpired()
         backgroundSince = 0L
         KeepAliveService.start(this)
@@ -65,7 +75,17 @@ class App : Application(), DefaultLifecycleObserver {
     override fun onStop(owner: LifecycleOwner) {
         backgroundSince = SystemClock.elapsedRealtime()
         WebViewHolder.suspendCams()
-        if (Prefs.killMinutes(this) > 0) handler.postDelayed(backgroundCheck, CHECK_INTERVAL_MS)
+        val minutes = Prefs.killMinutes(this)
+        if (minutes > 0) {
+            handler.postDelayed(backgroundCheck, CHECK_INTERVAL_MS)
+            wakeLock.acquire(minutes * 60_000L + CHECK_INTERVAL_MS)
+        } else {
+            wakeLock.acquire()
+        }
+    }
+
+    private fun releaseWakeLock() {
+        if (wakeLock.isHeld) wakeLock.release()
     }
 
     private fun backgroundExpired(): Boolean {
@@ -77,6 +97,7 @@ class App : Application(), DefaultLifecycleObserver {
     /** Closes the page, the notification, every screen, and finally the process. */
     fun shutdown() {
         handler.removeCallbacksAndMessages(null)
+        releaseWakeLock()
         WebViewHolder.destroy()
         activities.toList().forEach { it.finishAndRemoveTask() }
         stopService(Intent(this, KeepAliveService::class.java))
