@@ -90,6 +90,7 @@ class App : Application(), DefaultLifecycleObserver {
             else "Back in the app after ${(SystemClock.elapsedRealtime() - backgroundSince) / 1000} s"
         )
         backgroundSince = 0L
+        RelaySockets.setHolding(false)
         KeepAliveService.start(this)
         if (expired) {
             // The timer couldn't fire while the phone slept; treat this as a fresh start.
@@ -107,6 +108,7 @@ class App : Application(), DefaultLifecycleObserver {
     override fun onStop(owner: LifecycleOwner) {
         backgroundSince = SystemClock.elapsedRealtime()
         Diag.log("Went to the background")
+        RelaySockets.setHolding(true)
         WebViewHolder.suspendCams()
         val minutes = Prefs.killMinutes(this)
         if (minutes > 0) {

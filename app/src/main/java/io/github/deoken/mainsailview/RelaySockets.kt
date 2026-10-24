@@ -34,7 +34,25 @@ object RelaySockets {
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS) // a websocket waits for messages indefinitely
+        // Our own liveness check, done here where the phone doesn't freeze it: if the printer
+        // stops answering pings, the connection fails and Mainsail reconnects. (Mainsail's own
+        // 10 s check is switched off for relayed connections, see inject.js.)
+        .pingInterval(15, TimeUnit.SECONDS)
         .build()
+
+    private const val BATCH_SIZE = 500
+    private const val MAX_HELD = 20_000
+
+    // While the app is in the background the page may be frozen; hold incoming messages and
+    // hand them over in one go on return. Delivered one by one, a backlog of thousands of
+    // updates makes Mainsail redraw after each, leaving the page stuck for seconds.
+    private var holding = false
+
+    /** Holds messages for the page while the app is in the background; [on] = false delivers them. */
+    fun setHolding(on: Boolean) {
+        holding = on
+        if (!on) sockets.values.toList().forEach { it.flush() }
+    }
 
     private val sockets = mutableMapOf<Int, Relay>()
     private var reply: JavaScriptReplyProxy? = null
@@ -97,6 +115,18 @@ object RelaySockets {
     private class Relay(val id: Int) : WebSocketListener() {
         lateinit var ws: WebSocket
         private var closed = false
+        private val held = ArrayList<String>()
+
+        /** Hands held messages to the page, in order, a batch at a time. */
+        fun flush() {
+            var start = 0
+            while (start < held.size) {
+                val end = minOf(start + BATCH_SIZE, held.size)
+                toPage(JSONObject().put("t", "batch").put("id", id).put("data", org.json.JSONArray(held.subList(start, end))))
+                start = end
+            }
+            held.clear()
+        }
 
         // OkHttp calls back on its own thread; hand everything to the main thread, in order,
         // and drop events from a connection that was already replaced or closed.
@@ -108,6 +138,7 @@ object RelaySockets {
             post {
                 if (!closed) {
                     closed = true
+                    flush() // everything that arrived before the close comes first
                     sockets.remove(id)
                     toPage(JSONObject().put("t", "close").put("id", id).put("code", code).put("reason", reason).put("clean", clean))
                 }
@@ -119,7 +150,14 @@ object RelaySockets {
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
-            post { toPage(JSONObject().put("t", "msg").put("id", id).put("data", text)) }
+            post {
+                if (holding) {
+                    held.add(text)
+                    if (held.size >= MAX_HELD) flush() // don't let a very long absence grow memory
+                } else {
+                    toPage(JSONObject().put("t", "msg").put("id", id).put("data", text))
+                }
+            }
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {

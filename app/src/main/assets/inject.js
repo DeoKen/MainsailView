@@ -118,6 +118,12 @@
                 ws.dispatchEvent(new Event('open'));
             } else if (m.t === 'msg') {
                 if (ws.readyState === 1) ws.dispatchEvent(new MessageEvent('message', { data: m.data }));
+            } else if (m.t === 'batch') {
+                // Messages held while the app was in the background: deliver them all within
+                // this one task, so Mainsail applies them and redraws once, not per message.
+                for (var i = 0; i < m.data.length && ws.readyState === 1; i++) {
+                    ws.dispatchEvent(new MessageEvent('message', { data: m.data[i] }));
+                }
             } else if (m.t === 'close') {
                 delete relays[m.id];
                 var wasOpen = ws.readyState === 1 || ws.readyState === 2;
@@ -249,6 +255,10 @@
             if (confirming) log('Kept the connection: messages were still arriving after a pause');
             confirming = false;
             if (self.heartbeatTimer) clearTimeout(self.heartbeatTimer);
+            // A relayed connection is watched by the app itself (it pings the printer from a
+            // process the phone doesn't freeze), and messages for a page in the background are
+            // held until it returns, so silence here doesn't mean the printer is gone.
+            if (self.instance instanceof RelaySocket) return;
             self.heartbeatTimer = window.setTimeout(function () {
                 confirming = true;
                 self.heartbeatTimer = window.setTimeout(function () {
@@ -394,26 +404,34 @@
     document.addEventListener('fullscreenchange', reportFullscreen);
     document.addEventListener('webkitfullscreenchange', reportFullscreen);
 
-    // While something is fullscreen, pin the page's layout width. Rotating the screen would
-    // otherwise widen the page, Mainsail would rearrange the dashboard for the new width,
-    // the webcam panel would be rebuilt, and that drops it out of fullscreen.
-    var viewportBeforeFullscreen = null;
-    function pinLayoutWhileFullscreen() {
+    // While something is fullscreen, keep "window resized" events from Mainsail. Entering
+    // fullscreen (or rotating) resizes the page; Mainsail would then rearrange the dashboard
+    // for the new size, rebuild the webcam panel, and that drops the webcam out of fullscreen.
+    // One resize is sent when fullscreen ends so Mainsail catches up.
+    var fullscreenEl = null;
+    var widthBeforeFullscreen = 0;
+    if (isTop) {
+        // The resize arrives before the fullscreenchange event, so check the live state.
+        window.addEventListener('resize', function (e) {
+            if (document.fullscreenElement || document.webkitFullscreenElement) e.stopImmediatePropagation();
+        }, true);
+    }
+    function onFullscreenChange() {
         if (!isTop) return;
-        var meta = document.querySelector('meta[name="viewport"]');
-        if (document.fullscreenElement || document.webkitFullscreenElement) {
-            log('Fullscreen started');
-            if (meta && viewportBeforeFullscreen === null) {
-                viewportBeforeFullscreen = meta.content;
-                meta.content = 'width=' + window.innerWidth;
-            }
-        } else {
-            log('Fullscreen ended');
-            if (meta && viewportBeforeFullscreen !== null) meta.content = viewportBeforeFullscreen;
-            viewportBeforeFullscreen = null;
+        var el = document.fullscreenElement || document.webkitFullscreenElement;
+        if (el) {
+            fullscreenEl = el;
+            widthBeforeFullscreen = window.innerWidth;
+            log('Fullscreen started (' + el.tagName.toLowerCase() + ', page ' + window.innerWidth + ' px wide)');
+        } else if (fullscreenEl) {
+            log('Fullscreen ended (' + (fullscreenEl.isConnected ? 'webcam still on the page' : 'the page removed the webcam') +
+                ', page width ' + widthBeforeFullscreen + ' -> ' + window.innerWidth + ' px)');
+            fullscreenEl = null;
+            window.dispatchEvent(new Event('resize'));
         }
     }
-    document.addEventListener('fullscreenchange', pinLayoutWhileFullscreen);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
     document.addEventListener('fullscreenerror', function () {
         log('The page could not go fullscreen');
     });
