@@ -69,6 +69,15 @@ object WebViewHolder {
     private var viewWidthDp = 0f
     private var appliedScale = "" // "width:scale" last applied to the current page
 
+    // Held off while something is fullscreen: re-zooming the page then drops it out of
+    // fullscreen (e.g. when the screen rotates). Re-applied when fullscreen ends.
+    private var fullscreenActive = false
+
+    fun setFullscreenActive(active: Boolean) {
+        fullscreenActive = active
+        if (!active) applyScale(force = true)
+    }
+
     /** Shape of the element shown fullscreen (e.g. a webcam), for the PiP window. */
     var fullscreenWidth = 16
         private set
@@ -155,7 +164,7 @@ object WebViewHolder {
      */
     private fun applyScale(force: Boolean) {
         val wv = webView ?: return
-        if (viewWidthDp <= 0f) return
+        if (viewWidthDp <= 0f || fullscreenActive) return
         val width = pageWidth()
         val key = "$width:$uiScale"
         if (!force && key == appliedScale) return

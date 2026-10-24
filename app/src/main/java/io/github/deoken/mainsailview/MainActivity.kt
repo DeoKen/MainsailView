@@ -187,6 +187,7 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         }
         fullscreenView = view
         fullscreenCallback = callback
+        WebViewHolder.setFullscreenActive(true)
         view.setBackgroundColor(Color.BLACK)
         (window.decorView as ViewGroup).addView(
             view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
@@ -194,8 +195,11 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         val controller = WindowInsetsControllerCompat(window, root)
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         controller.hide(WindowInsetsCompat.Type.systemBars())
-        // Turn with the phone while fullscreen, even if auto-rotate is off.
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+        // Turn with the phone while fullscreen, even if auto-rotate is off. Slightly delayed
+        // so the page has pinned its layout width before the screen can rotate.
+        root.postDelayed({
+            if (fullscreenView === view) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+        }, 500)
         updatePipParams()
     }
 
@@ -203,6 +207,7 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         val view = fullscreenView ?: return
         fullscreenView = null
         fullscreenCallback = null
+        WebViewHolder.setFullscreenActive(false)
         (view.parent as? ViewGroup)?.removeView(view)
         WindowInsetsControllerCompat(window, root).show(WindowInsetsCompat.Type.systemBars())
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED // back to the phone's setting
@@ -244,6 +249,13 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
             } catch (e: IllegalStateException) {
                 // PiP turned off for this app in system settings.
             }
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (fullscreenView != null) {
+            Diag.log("Rotated to " + if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait")
         }
     }
 

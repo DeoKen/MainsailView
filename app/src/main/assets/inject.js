@@ -394,6 +394,30 @@
     document.addEventListener('fullscreenchange', reportFullscreen);
     document.addEventListener('webkitfullscreenchange', reportFullscreen);
 
+    // While something is fullscreen, pin the page's layout width. Rotating the screen would
+    // otherwise widen the page, Mainsail would rearrange the dashboard for the new width,
+    // the webcam panel would be rebuilt, and that drops it out of fullscreen.
+    var viewportBeforeFullscreen = null;
+    function pinLayoutWhileFullscreen() {
+        if (!isTop) return;
+        var meta = document.querySelector('meta[name="viewport"]');
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+            log('Fullscreen started');
+            if (meta && viewportBeforeFullscreen === null) {
+                viewportBeforeFullscreen = meta.content;
+                meta.content = 'width=' + window.innerWidth;
+            }
+        } else {
+            log('Fullscreen ended');
+            if (meta && viewportBeforeFullscreen !== null) meta.content = viewportBeforeFullscreen;
+            viewportBeforeFullscreen = null;
+        }
+    }
+    document.addEventListener('fullscreenchange', pinLayoutWhileFullscreen);
+    document.addEventListener('fullscreenerror', function () {
+        log('The page could not go fullscreen');
+    });
+
     mv.saveUrl = function (href, fileName) {
         fetch(href)
             .then(function (r) { return r.blob(); })
