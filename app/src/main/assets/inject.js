@@ -308,8 +308,31 @@
         document.dispatchEvent(new Event('visibilitychange'));
     }
 
+    // Webcams shown in an embedded player (Mainsail's "iframe" webcam type) can't be paused
+    // from here, and their stream stalls for good once the page has been frozen. Empty the
+    // frame while the app is in the background and load it fresh on return, which is what
+    // leaving and re-opening the page does.
+    function webcamFrames() {
+        return document.querySelectorAll('iframe.webcamImage, .webcamBackground iframe');
+    }
+    function pauseWebcamFrames() {
+        webcamFrames().forEach(function (f) {
+            if (f.hasAttribute('data-mv-src')) return;
+            f.setAttribute('data-mv-src', f.getAttribute('src') || '');
+            f.setAttribute('src', 'about:blank');
+        });
+    }
+    function resumeWebcamFrames() {
+        document.querySelectorAll('iframe[data-mv-src]').forEach(function (f) {
+            var src = f.getAttribute('data-mv-src');
+            f.removeAttribute('data-mv-src');
+            if (src) f.setAttribute('src', src);
+        });
+    }
+
     mv.suspendCams = function () {
         isSuspended = true;
+        if (isTop) pauseWebcamFrames();
         var list = live;
         live = [];
         list.forEach(suspend);
@@ -322,6 +345,7 @@
     // Mainsail's WebRTC streamers (camera-streamer, go2rtc, MediaMTX) restart themselves
     // when their connection reports "disconnected", so fake exactly that.
     mv.resumeCams = function () {
+        if (isTop) resumeWebcamFrames();
         if (!forcedHidden) {
             setForcedHidden(true);
             fireVisibilityChange();
