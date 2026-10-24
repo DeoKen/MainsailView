@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.PictureInPictureParams
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Color
@@ -193,6 +194,8 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         val controller = WindowInsetsControllerCompat(window, root)
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         controller.hide(WindowInsetsCompat.Type.systemBars())
+        // Turn with the phone while fullscreen, even if auto-rotate is off.
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
         updatePipParams()
     }
 
@@ -202,6 +205,7 @@ class MainActivity : AppCompatActivity(), WebViewHolder.Host {
         fullscreenCallback = null
         (view.parent as? ViewGroup)?.removeView(view)
         WindowInsetsControllerCompat(window, root).show(WindowInsetsCompat.Type.systemBars())
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED // back to the phone's setting
         updatePipParams()
     }
 
