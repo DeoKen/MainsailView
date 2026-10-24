@@ -216,6 +216,7 @@ object WebViewHolder {
             useWideViewPort = true
             loadWithOverviewMode = true
         }
+        wv.setOnTouchListener(QuickZoom(wv))
         wv.addOnLayoutChangeListener { v, left, _, right, _, oldLeft, _, oldRight, _ ->
             if (right - left == oldRight - oldLeft) return@addOnLayoutChangeListener
             viewWidthDp = (right - left) / v.resources.displayMetrics.density

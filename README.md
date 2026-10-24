@@ -8,7 +8,7 @@ in a WebView that stays connected while you're in other apps.
 - **UI scale** (separate for a foldable's main and cover screens, told apart by whether the window spans the fold) changes the page width Mainsail sees, so you can choose its mobile, tablet, desktop
   or widescreen layout (and the dashboard you set up for it). It is a percentage of whichever screen
   is in use, so a foldable's cover and main screens each adapt; Settings shows the resulting layout.
-- Back / forward / reload buttons, and pinch-to-zoom. The toolbar can sit at the top or bottom.
+- Back / forward / reload buttons, pinch-to-zoom and double-tap-and-drag zoom. The toolbar can sit at the top or bottom.
 - A foreground service (with its notification) keeps the app alive in the background, and
   Mainsail's printer connection is held by the app itself (not the page), so it keeps
   answering the printer even while the phone has the page frozen.

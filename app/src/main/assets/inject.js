@@ -365,6 +365,14 @@
         viewportWatcher.observe(document, { childList: true, subtree: true });
     }
 
+    // Mainsail's temperature table: keep the heater power ("48 %") on one line. On narrow
+    // layouts it wraps to "48 / %" whenever the value changes width, making the rows jump.
+    if (isTop) {
+        var layoutFix = document.createElement('style');
+        layoutFix.textContent = '.temperature-panel-table td.state { white-space: nowrap; }';
+        (document.head || document.documentElement).appendChild(layoutFix);
+    }
+
     // Fullscreen (e.g. the webcam video's own fullscreen button): tell the app the shape of
     // what went fullscreen, so its picture-in-picture window matches.
     function reportFullscreen() {
